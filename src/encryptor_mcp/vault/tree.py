@@ -42,6 +42,7 @@ class Tree:
         self.root = Path(root)
         self.names = Names(key, config.shortening_threshold)
         self.content = Content(key, config.cipher_combo)
+        self.cipher_combo = config.cipher_combo
         self.conflicts: list[Path] = []
 
     def dir_location(self, dir_id: bytes) -> Path:
