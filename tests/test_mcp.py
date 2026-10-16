@@ -76,7 +76,7 @@ def test_url_mode_unlock_read_lock(tmp_path):
     assert out["unlock"].startswith("GCM is open.")
     assert "GCM: OPEN" in out["vaults2"] and "SIV_GCM" in out["vaults2"]
     assert "[folder] Folder A/" in out["list"] and "[link]   link to hello -> hello.txt" in out["list"]
-    assert out["read"] == "Unicode name and text: ü é 日本\n"
+    assert out["read"].startswith("[version ") and out["read"].endswith("]\nUnicode name and text: ü é 日本\n")
     assert "Long folder name" in out["find"] and "a very long file name" in out["find"]
     assert "Size: 97.7 KB" in out["info"] and "Stored encrypted as: d/" in out["info"]
     assert out["lock"] == "GCM is locked." and out["after_lock"].is_error

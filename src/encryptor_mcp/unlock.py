@@ -64,6 +64,7 @@ class Session:
     app: str
     purpose: str
     status_code: str = field(default_factory=lambda: secrets.token_urlsafe(24))
+    journal: object = None      # changes.Journal, made on the first change
 
 
 class UnlockManager:

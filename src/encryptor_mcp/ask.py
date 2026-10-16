@@ -67,3 +67,46 @@ def password_box(vault: str, app: str, purpose: str, timeout: int = TIMEOUT, run
         out = run(["powershell", "-NoProfile", "-Command", ps, vault], capture_output=True, text=True, timeout=timeout + 30)
         return out.stdout.rstrip("\r\n") if out.returncode == 0 else None
     return None
+
+
+MAC_CONFIRM = """
+on run argv
+  set msg to "Your AI app " & item 2 of argv & " asks:" & return & return & item 1 of argv
+  if item 3 of argv is not "" then set msg to msg & return & return & "Why: " & item 3 of argv
+  try
+    set r to display dialog msg buttons {"Cancel", item 4 of argv} default button "Cancel" cancel button "Cancel" ¬
+      with title "Encryptor" with icon caution giving up after (item 5 of argv as integer)
+  on error number -128
+    return "NO"
+  end try
+  if gave up of r then return "NO"
+  return "YES"
+end run
+"""
+
+
+def confirm_box(question: str, app: str, purpose: str, button: str = "Allow", timeout: int = 120,
+                run=subprocess.run) -> bool | None:
+    """True when the person clicked the button, False when they said no or it timed out, None if unavailable.
+    Cancel is the default button, so pressing Return never approves by accident."""
+    question, app, purpose, button = question[:500], app[:80], purpose[:300], button[:40]
+    if sys.platform == "darwin":
+        out = run(["osascript", "-e", MAC_CONFIRM, question, app, purpose, button, str(timeout)],
+                  capture_output=True, text=True, timeout=timeout + 30)
+        return out.returncode == 0 and out.stdout.strip() == "YES"
+    if sys.platform.startswith("linux"):
+        text = f"{app} asks: {question}" + (f"\nWhy: {purpose}" if purpose else "")
+        if shutil.which("zenity"):
+            cmd = ["zenity", "--question", "--title", "Encryptor", "--text", text, "--ok-label", button,
+                   "--cancel-label", "Cancel", "--default-cancel", "--timeout", str(timeout)]
+        else:
+            cmd = ["kdialog", "--title", "Encryptor", "--warningcontinuecancel", text, "--continue-label", button]
+        return run(cmd, capture_output=True, text=True, timeout=timeout + 30).returncode == 0
+    if sys.platform == "win32":
+        ps = ("Add-Type -AssemblyName PresentationFramework; "
+              "if ([System.Windows.MessageBox]::Show($args[0], 'Encryptor', 'OKCancel', 'Warning', 'Cancel') -eq 'OK') "
+              "{ 'YES' } else { 'NO' }")
+        out = run(["powershell", "-NoProfile", "-Command", ps, f"{app} asks: {question}"],
+                  capture_output=True, text=True, timeout=timeout + 30)
+        return out.stdout.strip() == "YES"
+    return None

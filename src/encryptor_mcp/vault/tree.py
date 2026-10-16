@@ -31,6 +31,7 @@ class Entry:
     kind: str           # "file", "dir" or "link"
     stored: Path        # where it is on disk (the .c9r file, or the .c9r/.c9s folder)
     dir_id: bytes | None = None
+    parent_id: bytes | None = None   # the ID of the folder it's in (None for the root)
 
 
 class NotFound(VaultError):
@@ -50,6 +51,12 @@ class Tree:
         return self.root / "d" / xx / rest
 
     def _entry(self, path: Path, dir_id: bytes) -> Entry | None:
+        e = self._entry_inner(path, dir_id)
+        if e:
+            e.parent_id = dir_id
+        return e
+
+    def _entry_inner(self, path: Path, dir_id: bytes) -> Entry | None:
         name = path.name
         if name.startswith(".") or name == "dirid.c9r":
             return None
@@ -120,8 +127,13 @@ class Tree:
         path = entry.stored / "contents.c9r" if entry.stored.is_dir() else entry.stored
         return self.content.decrypt(path.read_bytes())
 
+    @staticmethod
+    def contents_path(entry: Entry) -> Path:
+        """The encrypted contents file of a file entry (inside the .c9s folder for long names)."""
+        return entry.stored / "contents.c9r" if entry.stored.is_dir() else entry.stored
+
     def file_size(self, entry: Entry) -> int:
-        path = entry.stored / "contents.c9r" if entry.stored.is_dir() else entry.stored
+        path = self.contents_path(entry)
         return self.content.cleartext_size(path.stat().st_size)
 
     def read_link(self, entry: Entry) -> str:
