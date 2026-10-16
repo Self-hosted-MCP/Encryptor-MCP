@@ -6,3 +6,4 @@ dist/
 state/
 .DS_Store
 .tools/
+.jars/

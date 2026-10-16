@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -37,7 +38,14 @@ def _write_atomic(path: Path, data: bytes) -> None:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        for attempt in range(20):   # Windows refuses while another program (a sync app, an editor) has it open
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise VaultError(f"'{path.name}' is in use by another program. Try again in a moment.")
+                time.sleep(0.25)
     finally:
         if tmp.exists():
             tmp.unlink()

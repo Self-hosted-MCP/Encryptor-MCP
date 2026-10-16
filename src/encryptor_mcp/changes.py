@@ -16,10 +16,10 @@ Deleting for good happens only by emptying the trash, which the person approves 
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import secrets
+import sys
 import threading
 import time
 import unicodedata
@@ -34,6 +34,22 @@ META = ".encryptor"
 MAX_CHANGES_PER_MINUTE = 60
 _locks: dict[str, threading.Lock] = {}
 _last_us = 0
+
+
+def _try_lock(f) -> bool:
+    """An exclusive lock on an open file, without waiting: fcntl on macOS and Linux, msvcrt on Windows.
+    Released when the file is closed."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
 
 
 class Refused(VaultError):
@@ -73,13 +89,11 @@ class Journal:
         try:
             if self.lock_file:
                 self.lock_file.parent.mkdir(parents=True, exist_ok=True)
-                f = open(self.lock_file, "a")
+                f = open(self.lock_file, "a+")
                 for _ in range(60):
-                    try:
-                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    if _try_lock(f):
                         break
-                    except BlockingIOError:
-                        time.sleep(0.5)
+                    time.sleep(0.5)
                 else:
                     raise Refused("Another program is changing this vault. Try again in a moment.")
             yield

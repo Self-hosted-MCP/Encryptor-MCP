@@ -1,0 +1,43 @@
+# Runs every test on macOS, Windows and Linux, with the oldest and newest supported Python, for every push and
+# pull request. The compatibility checks run Cryptomator's own libraries (fetched from Maven Central by
+# tests/java/fetch_jars.py, each file checked against a pinned SHA-256), so vaults written here must open in
+# Cryptomator on every system.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.14"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Allow long paths (Windows)
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1, pinned
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884   # v10.3.0, pinned
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad   # v6.1.0, pinned
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Fetch Cryptomator's libraries (checksums pinned)
+        run: uv run --no-project python tests/java/fetch_jars.py "${{ github.workspace }}/.jars"
+      - name: Tests
+        env:
+          CRYPTOMATOR_MODS: ${{ github.workspace }}/.jars
+          REQUIRE_REFERENCE: "1"
+        run: uv run pytest -q

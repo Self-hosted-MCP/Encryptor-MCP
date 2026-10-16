@@ -32,7 +32,9 @@ def official(*args: str) -> list[str]:
     """Runs RefVault.java with Cryptomator's libraries; returns its entry lines."""
     j = java()
     if not j or not CRYPTOMATOR_MODS.is_dir():
-        pytest.skip("needs a JDK and Cryptomator.app for the official reference")
+        if os.environ.get("REQUIRE_REFERENCE"):   # in CI the reference must run, never be skipped quietly
+            pytest.fail("the official reference (a JDK and Cryptomator's libraries) is required here")
+        pytest.skip("needs a JDK and Cryptomator.app (or tests/java/fetch_jars.py) for the official reference")
     out = subprocess.run([j, "-cp", f"{CRYPTOMATOR_MODS}/*", str(ROOT / "java" / "RefVault.java"), *args],
                          capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stderr[-2000:]

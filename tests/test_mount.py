@@ -2,7 +2,9 @@
 """The Finder mount's WebDAV server, its guards, and mounting/unmounting (macOS commands faked here; the real
 mount was checked by hand in Finder)."""
 import shutil
+from pathlib import Path
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 
@@ -84,7 +86,8 @@ def test_changes_go_through_the_log_and_trash(dav):
     assert not any(e.name.startswith("._") or e.name == ".DS_Store" for _, e in t.walk())
     assert t.read_file(t.resolve("/Made here/A/Sub folder/notes ü é 日本.txt")).startswith(b"Unicode")
     assert ours(t) == official("dump", str(v), password("SIV_GCM"))
-    j.undo("", "test", "")      # the delete
+    j.undo("", "test", "")      # the delete, done outside the mount: Finder sees it within the 2-second cache
+    mt.provider.changed()
     assert req(mt.url + "big.bin")[0] == 200
 
 
@@ -102,6 +105,7 @@ def test_read_only_and_locked(dav, tmp_path):
     assert req(mt.url, "PROPFIND")[0] == 404
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the Finder mount is macOS only")
 def test_same_user_check(monkeypatch):
     calls = []
 
@@ -137,7 +141,7 @@ def test_mount_and_unmount_on_lock(tmp_path, monkeypatch):
     monkeypatch.setattr(mount.shutil, "which", lambda name: "/sbin/" + name)
     ms = mount.Mounts(m, lambda s: Journal(s.tree), tmp_path / "mounts", run=fake)
     where = ms.mount(s)
-    assert where.endswith("/mounts/My Vault") and ms.where("My Vault") == where and "open" in ran
+    assert Path(where) == tmp_path / "mounts" / "My Vault" and ms.where("My Vault") == where and "open" in ran
     assert ms.mount(s) == where                             # a second click reuses it
     m.lock("My Vault", "locked: no use")                    # locking removes it (in a background thread)
     import time

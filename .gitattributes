@@ -1,0 +1,2 @@
+# The test vaults must stay byte-for-byte (no line-ending changes on Windows)
+tests/fixtures/** binary
