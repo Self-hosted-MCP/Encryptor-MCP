@@ -308,7 +308,7 @@ def file_info(vault: str, path: str) -> str:
     stat = e.stored.stat()
     lines = [f"{path}: {e.kind}",
              f"Changed: {time.strftime('%Y-%m-%d %H:%M', time.localtime(stat.st_mtime))}",
-             f"Stored encrypted as: {e.stored.relative_to(s.vault.path)}"]
+             f"Stored encrypted as: {e.stored.relative_to(s.vault.path).as_posix()}"]
     if e.kind == "file":
         lines.insert(1, f"Size: {_size(s.tree.file_size(e))}")
         lines.insert(2, f"Version: {journal(s).etag(e)}")

@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad   # v6.1.0, pinned
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "25"
       - name: Fetch Cryptomator's libraries (checksums pinned)
         run: uv run --no-project python tests/java/fetch_jars.py "${{ github.workspace }}/.jars"
       - name: Tests
