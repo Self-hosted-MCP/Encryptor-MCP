@@ -1,0 +1,26 @@
+[project]
+name = "encryptor-mcp"
+version = "0.0.1"
+description = "Open Cryptomator vaults from any AI app or agent: read and write with the vault's own keys, unlocked by you, never through the chat."
+readme = "README.md"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3,<3",
+    "cryptography>=44",
+]
+keywords = ["mcp", "cryptomator", "encryption", "vault", "self-hosted"]
+
+[project.scripts]
+encryptor-mcp = "encryptor_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8"]
