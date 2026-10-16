@@ -4,6 +4,7 @@
 The fixtures in tests/fixtures/ were made with cryptofs 2.10.0 and cryptolib 2.2.2 from Cryptomator 1.19.3, with
 test passwords only. Tests that run the official code need a JDK and Cryptomator.app; they're skipped otherwise.
 """
+import base64
 import os
 import shutil
 import subprocess
@@ -35,8 +36,10 @@ def official(*args: str) -> list[str]:
         if os.environ.get("REQUIRE_REFERENCE"):   # in CI the reference must run, never be skipped quietly
             pytest.fail("the official reference (a JDK and Cryptomator's libraries) is required here")
         pytest.skip("needs a JDK and Cryptomator.app (or tests/java/fetch_jars.py) for the official reference")
-    out = subprocess.run([j, "-cp", f"{CRYPTOMATOR_MODS}/*", str(ROOT / "java" / "RefVault.java"), *args],
-                         capture_output=True, text=True, timeout=120)
+    # non-ASCII arguments go base64-encoded and the output comes back as UTF-8, so names survive on Windows too
+    safe = [a if a.isascii() else "b64:" + base64.b64encode(a.encode()).decode() for a in args]
+    out = subprocess.run([j, "-cp", f"{CRYPTOMATOR_MODS}/*", str(ROOT / "java" / "RefVault.java"), *safe],
+                         capture_output=True, text=True, encoding="utf-8", timeout=120)
     assert out.returncode == 0, out.stderr[-2000:]
     return sorted(line for line in out.stdout.splitlines() if line.split("\t")[0] in ("dir", "file", "link"))
 

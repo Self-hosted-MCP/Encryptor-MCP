@@ -34,7 +34,14 @@ public class RefVault {
         return b.build();
     }
 
-    public static void main(String[] args) throws Exception {
+    // Arguments may come as "b64:<base64 of UTF-8>", so names outside the system code page (Windows) arrive intact.
+    static String arg(String a) {
+        return a.startsWith("b64:") ? new String(java.util.Base64.getDecoder().decode(a.substring(4)), StandardCharsets.UTF_8) : a;
+    }
+
+    public static void main(String[] raw) throws Exception {
+        String[] args = java.util.Arrays.stream(raw).map(RefVault::arg).toArray(String[]::new);
+        System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
         Path vault = Paths.get(args[1]);
         switch (args[0]) {
             case "make" -> {
