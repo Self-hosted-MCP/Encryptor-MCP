@@ -78,6 +78,7 @@ class UnlockManager:
         self.sessions: dict[str, Session] = {}
         self.failures: dict[str, list[float]] = {}
         self.events: list[tuple[float, str, str]] = []   # (time, vault, what): for the log, never with secrets
+        self.on_lock: list = []   # called with the vault name after it locks (in a thread): e.g. remove a mount
 
     # ------------------------------------------------------------ helpers
 
@@ -90,6 +91,10 @@ class UnlockManager:
     def _event(self, vault: str, what: str) -> None:
         self.events.append((self.clock(), vault, what))
         del self.events[:-500]
+
+    def _after_lock(self, vault: str) -> None:
+        for fn in self.on_lock:
+            threading.Thread(target=fn, args=(vault,), name="after-lock", daemon=True).start()
 
     def locked_out(self, vault: str) -> float:
         """Seconds left of a lockout after too many wrong passwords (0 when not locked out)."""
@@ -186,6 +191,7 @@ class UnlockManager:
                 return False
             s.key.wipe()
             self._event(s.vault.name, reason)
+            self._after_lock(s.vault.name)
             return True
 
     def lock_all(self, reason: str = "locked") -> None:
@@ -194,6 +200,7 @@ class UnlockManager:
                 s = self.sessions.pop(name)
                 s.key.wipe()
                 self._event(s.vault.name, reason)
+                self._after_lock(s.vault.name)
 
     def sweep(self) -> None:
         """Locks what has been idle too long or reached its time."""

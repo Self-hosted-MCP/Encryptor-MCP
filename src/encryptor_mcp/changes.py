@@ -22,6 +22,7 @@ import json
 import secrets
 import threading
 import time
+import unicodedata
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -40,7 +41,8 @@ class Refused(VaultError):
 
 
 def clean(path: str) -> str:
-    parts = [p for p in (path or "").strip("/").split("/") if p]
+    """A tidy absolute path, in NFC (names are stored NFC; macOS often sends decomposed names)."""
+    parts = [unicodedata.normalize("NFC", p) for p in (path or "").strip("/").split("/") if p]
     if parts and parts[0].casefold() == META:
         raise Refused(f"'{META}' holds Encryptor's own records; use changes, versions, undo and the trash tools.")
     return "/" + "/".join(parts)
@@ -197,6 +199,22 @@ class Journal:
             parent, name = parent_and_name(self.t, to)
             self.w.move(entry, parent, name)
             return self._record("move", path, app, purpose, to=to)
+
+    def move_over(self, path: str, to: str, app: str, purpose: str) -> dict:
+        """Move a file onto an existing file (how many apps save: write a temporary file, then rename it over the
+        original). The original's contents are kept as a version, so this is an undoable replace."""
+        path, to = clean(path), clean(to)
+        with self._locked():
+            self._brake()
+            src, dst = self._get(path), self._get(to)
+            if src.kind != "file" or dst.kind != "file":
+                raise Refused("Only a file can replace a file.")
+            cid = self._new_id()
+            saved = self._keep_version(dst, cid)
+            self.w.remove(dst)
+            parent, name = parent_and_name(self.t, to)
+            e = self.w.move(src, parent, name)
+            return self._record("write", to, app, purpose, id=cid, saved=saved, source=path, after=self.etag(e))
 
     def copy(self, path: str, to: str, app: str, purpose: str) -> dict:
         path, to = clean(path), clean(to)

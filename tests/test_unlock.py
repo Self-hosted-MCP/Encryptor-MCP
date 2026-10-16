@@ -132,7 +132,7 @@ def call(lp, method, path, form=None, host=None, origin="same"):
             headers["Origin"] = lp.base if origin == "same" else origin
     c.request(method, path, body=body, headers=headers)
     r = c.getresponse()
-    return r.status, dict(r.getheaders()), r.read().decode()
+    return r.status, dict(r.getheaders()), r.read().decode("utf-8", "replace")
 
 
 def test_page_shows_who_and_why_without_scripts(page):
@@ -190,3 +190,51 @@ def test_box_cancel_or_timeout(monkeypatch, answer):
     monkeypatch.setattr(ask.sys, "platform", "darwin")
     fake = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, answer, "")
     assert ask.password_box("V", "A", "P", run=fake) is None
+
+
+# ---------------------------------------------------------------- the browse page
+
+@pytest.fixture
+def open_page(tmp_path):
+    import shutil
+    v = tmp_path / "v"
+    shutil.copytree(FIXTURES / "vault-SIV_GCM", v)
+    mgr = U.UnlockManager([U.VaultSpec("Test", v)])
+    lp = web.LocalPages(mgr)
+    s = mgr.unlock(mgr.request_unlock("Test"), PW)
+    from encryptor_mcp.changes import Journal
+    j = Journal(s.tree)
+    j.write("/x <b>.html", b"<script>alert(1)</script>", "", "t", "")
+    j.write("/pic.png", b"\x89PNG\r\n\x1a\n" + b"\0" * 20, "", "t", "")
+    j.write("/doc.pdf", b"%PDF-1.4", "", "t", "")
+    yield mgr, lp, f"/vault/{s.status_code}"
+    lp.close()
+
+
+def test_browse_lists_folders_and_hides_records(open_page):
+    mgr, lp, base = open_page
+    status, _, body = call(lp, "GET", base + "/files/")
+    assert status == 200 and "Folder A" in body and ".encryptor" not in body and "x &lt;b&gt;.html" in body
+    status, _, body = call(lp, "GET", base + "/files/Folder%20A/Sub%20folder/")
+    assert "notes ü é 日本.txt" in body
+    assert call(lp, "GET", base + "/files/.encryptor/")[0] == 404
+    assert call(lp, "GET", base + "/files/Folder%20A/..%2F..%2F/")[0] == 404
+
+
+def test_files_open_sandboxed_or_download(open_page):
+    mgr, lp, base = open_page
+    status, h, body = call(lp, "GET", base + "/open/x%20%3Cb%3E.html")
+    assert status == 200 and h["Content-Type"].startswith("text/plain") and "sandbox" in h["Content-Security-Policy"]
+    status, h, _ = call(lp, "GET", base + "/open/pic.png")
+    assert h["Content-Type"] == "image/png" and "sandbox" in h["Content-Security-Policy"]
+    assert "can&#x27;t be shown" in call(lp, "GET", base + "/open/doc.pdf")[2]
+    status, h, _ = call(lp, "GET", base + "/get/Folder%20A/Sub%20folder/notes%20%C3%BC%20%C3%A9%20%E6%97%A5%E6%9C%AC.txt")
+    assert h["Content-Disposition"].startswith("attachment;") and "UTF-8''notes%20%C3%BC" in h["Content-Disposition"]
+    assert any("downloaded Folder A/Sub folder/notes" in e[2] for e in mgr.events)
+
+
+def test_browse_needs_the_secret_and_an_open_vault(open_page):
+    mgr, lp, base = open_page
+    assert call(lp, "GET", "/vault/wrong/files/")[0] == 404
+    mgr.lock("Test")
+    assert call(lp, "GET", base + "/files/")[0] == 404

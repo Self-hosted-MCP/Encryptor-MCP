@@ -48,15 +48,31 @@ button.quiet{background:transparent;color:var(--err);border:1.5px solid var(--er
 dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}
 dt{color:var(--soft)}dd{margin:0;font-weight:600}
 footer{text-align:center;color:var(--soft);font-size:.82rem;padding:0 16px 18px}
+main.wide{max-width:760px}
+.crumbs{margin:0 0 14px;color:var(--soft);overflow-wrap:anywhere}
+.crumbs a{color:var(--brand)}
+.note a{color:var(--brand);font-weight:600}
+@media (prefers-color-scheme:dark){.crumbs a,.files a,.note a{color:#b3c3f5}}
+table.files{width:100%;border-collapse:collapse;font-size:.95rem}
+.files td{padding:9px 6px;border-top:1px solid var(--line);vertical-align:top}
+.files td.name{overflow-wrap:anywhere;width:100%}
+.files td.meta{color:var(--soft);white-space:nowrap;text-align:right}
+.files a{color:var(--brand);text-decoration:none;font-weight:600}
+.files .act a{font-weight:500;margin-left:10px}
+.links{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.links a,.links button{flex:1;min-width:150px;margin:0;text-align:center;text-decoration:none;font:inherit;font-weight:700;
+padding:13px;border-radius:10px;background:var(--brand);color:#fff;border:0;cursor:pointer}
+.links form{flex:1;min-width:150px;display:flex}
+@media (max-width:520px){.files td.meta.date{display:none}}
 """
 
 KEEP_LABELS = [("15m", "15 minutes"), ("1h", "1 hour"), ("lock", "Until I lock it"), ("app", "Until the AI app closes")]
 
 
-def page(title: str, sub: str, body: str) -> str:
+def page(title: str, sub: str, body: str, wide: bool = False) -> str:
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'
-            f'<title>{esc(title)} · Encryptor</title><style>{CSS}</style></head><body><main>'
+            f'<title>{esc(title)} · Encryptor</title><style>{CSS}</style></head><body><main{" class=wide" if wide else ""}>'
             f'<header><small>Encryptor</small><h1>{esc(title)}</h1><p>{sub}</p></header>'
             f'<section>{body}</section></main></body></html>')
 
@@ -82,13 +98,24 @@ def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", 
 
 
 def unlocked(vault: str, status_code: str, read_only: bool, keep: str, app: str, ends_at: str,
-             idle_minutes: int) -> str:
+             idle_minutes: int, finder: str | None = None, mounted: str = "", note: str = "") -> str:
+    """finder: None when a Finder mount isn't possible here; mounted: where it's mounted, when it is."""
     keep_text = dict(KEEP_LABELS).get(keep, keep)
     body = (f'<p class="msg ok" role="status">Open{" (read only)" if read_only else ""}. You can close this page.</p>'
             f'<dl><dt>For</dt><dd>{esc(app)}</dd><dt>Kept open</dt><dd>{esc(keep_text)}</dd>'
             f'<dt>Locks at</dt><dd>{esc(ends_at)} at the latest</dd>'
             f'<dt>Without use</dt><dd>locks after {idle_minutes} minutes</dd></dl>'
-            f'<form method="post" action="/vault/{esc(status_code)}/lock">'
+
+            + (f'<p class="msg ok" style="margin-top:16px">{esc(note)}</p>' if note else "")
+            + f'<div class="links"><a href="/vault/{esc(status_code)}/files/">Browse files</a>'
+            + (f'<form method="post" action="/vault/{esc(status_code)}/unmount"><button type="submit">Remove from {esc(finder)}</button></form>'
+               if mounted else
+               f'<form method="post" action="/vault/{esc(status_code)}/mount"><button type="submit">Show in {esc(finder)}</button></form>'
+               if finder else "")
+            + '</div>'
+            + (f'<p class="note">In {esc(finder)}, under Locations ({esc(_home(mounted))}). Decrypted only in memory; deleting there puts things in '
+               f'the vault\'s trash. It goes away when the vault locks.</p>' if mounted else "")
+            + f'<form method="post" action="/vault/{esc(status_code)}/lock">'
             f'<button class="quiet" type="submit">Lock now</button></form>'
             f'<p class="note">To check later, open this page again. Bookmark it only on this computer.</p>')
     return page(f"{vault} is open", "Decrypted only in memory, on this computer.", body)
@@ -96,3 +123,37 @@ def unlocked(vault: str, status_code: str, read_only: bool, keep: str, app: str,
 
 def message(title: str, text: str, ok: bool = False) -> str:
     return page(title, "", f'<p class="msg {"ok" if ok else "err"}">{esc(text)}</p>')
+
+
+def browse(vault: str, status_code: str, folder: str, rows: list[tuple[str, str, str, str, bool]]) -> str:
+    """rows: (name, kind, size, date, viewable). Links are built from the folder path, every part escaped."""
+    from urllib.parse import quote
+    base = f"/vault/{quote(status_code)}"
+    parts = [p for p in folder.strip("/").split("/") if p]
+    crumbs = [f'<a href="{base}/files/">{esc(vault)}</a>']
+    for i, p in enumerate(parts):
+        crumbs.append(f'<a href="{base}/files/{quote("/".join(parts[:i + 1]))}/">{esc(p)}</a>')
+    out = []
+    for name, kind, size, date, viewable in rows:
+        rel = quote("/".join(parts + [name]))
+        if kind == "dir":
+            out.append(f'<tr><td class="name">&#128193; <a href="{base}/files/{rel}/">{esc(name)}</a></td>'
+                       f'<td class="meta"></td><td class="meta date">{esc(date)}</td><td class="act"></td></tr>')
+        elif kind == "link":
+            out.append(f'<tr><td class="name">&#8599; {esc(name)}</td><td class="meta">link</td>'
+                       f'<td class="meta date"></td><td class="act"></td></tr>')
+        else:
+            view = f'<a href="{base}/open/{rel}">{esc(name)}</a>' if viewable else esc(name)
+            out.append(f'<tr><td class="name">&#128196; {view}</td><td class="meta">{esc(size)}</td>'
+                       f'<td class="meta date">{esc(date)}</td><td class="act"><a href="{base}/get/{rel}">Download</a></td></tr>')
+    body = (f'<p class="crumbs">{" / ".join(crumbs)}</p>'
+            + (f'<table class="files">{"".join(out)}</table>' if out else '<p class="note">This folder is empty.</p>')
+            + f'<p class="note"><a href="{base}">Back to the vault</a> · Decrypted only in memory, on this computer. '
+              f'Opened files show in this browser only; downloads are saved decrypted.</p>')
+    return page(f"{vault}", "Browse files", body, wide=True)
+
+
+def _home(path: str) -> str:
+    import os
+    home = os.path.expanduser("~")
+    return "~" + path[len(home):] if path.startswith(home + "/") else path

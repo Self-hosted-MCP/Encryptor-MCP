@@ -14,6 +14,7 @@ Conflict copies (like "ABC (1).c9r") are reported, not read, until conflict hand
 from __future__ import annotations
 
 import os
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,7 +109,7 @@ class Tree:
 
     def resolve(self, clear_path: str) -> Entry:
         """The entry at a clear path like 'Folder A/notes.txt' ('' or '/' is the root folder)."""
-        parts = [p for p in clear_path.strip("/").split("/") if p]
+        parts = [unicodedata.normalize("NFC", p) for p in clear_path.strip("/").split("/") if p]
         entry = Entry("", "dir", self.dir_location(ROOT_DIR_ID), ROOT_DIR_ID)
         for i, part in enumerate(parts):
             if part in (".", ".."):

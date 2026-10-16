@@ -19,6 +19,7 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
     ENCRYPTOR_UNLOCK        auto (the app opens the page, else a native box, else a link), page, box or link
     ENCRYPTOR_APPROVE       how the person approves deleting for good: auto (a native box, else the app's own
                             question, else a one-time code), box, ask or code
+    ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
     ENCRYPTOR_ASK_BEFORE    also approve these, comma separated: replace, trash, move (default: none; every
                             change can be undone anyway)
 
@@ -50,7 +51,7 @@ APP = "encryptor-mcp"
 CONFIG_DIR = Path(os.environ.get("ENCRYPTOR_CONFIG_DIR") or Path.home() / ".config" / APP).expanduser()
 ENV_FILE = Path(os.environ.get("ENCRYPTOR_ENV_FILE") or CONFIG_DIR / ".env").expanduser()
 SETTINGS = ("ENCRYPTOR_VAULTS", "ENCRYPTOR_MODES", "ENCRYPTOR_IDLE_MINUTES", "ENCRYPTOR_MAX_HOURS", "ENCRYPTOR_UNLOCK",
-            "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE")
+            "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER")
 MAX_READ_CHARS = 200_000
 MAX_WRITE_CHARS = 5_000_000
 APPROVAL_TTL = 300
@@ -98,10 +99,22 @@ def manager() -> UnlockManager:
     return _manager
 
 
+_mounts = None
+
+
+def mounts():
+    """Finder mounts (macOS), offered on the vault's status page; ENCRYPTOR_FINDER=off hides the button."""
+    global _mounts
+    if _mounts is None and (config().get("ENCRYPTOR_FINDER") or "on").lower() != "off":
+        from .mount import Mounts
+        _mounts = Mounts(manager(), journal, CONFIG_DIR / "mounts")
+    return _mounts
+
+
 def pages() -> web.LocalPages:
     global _pages
     if _pages is None:
-        _pages = web.LocalPages(manager())
+        _pages = web.LocalPages(manager(), mounts=mounts())
     return _pages
 
 
@@ -576,6 +589,8 @@ def main() -> None:
         try:
             mcp.run()
         finally:
+            if _mounts:
+                _mounts.unmount_all()
             if _manager:
                 _manager.lock_all("locked: the AI app closed")
     elif mode == "version":
