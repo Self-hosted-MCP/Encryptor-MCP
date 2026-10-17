@@ -284,9 +284,10 @@ def _csrf(token: str) -> str:
 # ---------------------------------------------------------------- unlocking
 
 def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", idle_minutes: int = 10,
-                center: bool = False, by_person: bool = False) -> str:
+                center: bool = False, by_person: bool = False, hosted: bool = False) -> str:
+    # "Until the AI app closes" only means something on a computer, where the app's closing ends Encryptor too
     keep = "".join(f'<label><input type="radio" name="keep" value="{v}"{" checked" if v == "lock" else ""}>'
-                   f'<span>{esc(t)}</span></label>' for v, t in KEEP_LABELS)
+                   f'<span>{esc(t)}</span></label>' for v, t in KEEP_LABELS if not (hosted and v == "app"))
     body = (f'<section class="card">{_msg(error)}'
             f'<div class="headline"><h1><span class="mark">Unlock {esc(vault)}</span></h1><span class="stamp locked">Locked</span></div>'
             + ("" if by_person else
@@ -556,7 +557,7 @@ def settings(d: dict) -> str:
             '<label for="vn" style="margin-top:0">Name</label>'
             '<input id="vn" type="text" name="name" required maxlength="60" placeholder="Taxes">'
             '<label for="vp">Vault folder</label><input id="vp" type="text" name="path" required '
-            f'placeholder="{"/data/vaults/Taxes" if d["hosted"] else "~/Nextcloud/Taxes"}">'
+            f'placeholder="{"/vaults/Taxes" if d["hosted"] else "~/Nextcloud/Taxes"}">'
             '<p class="note" style="margin-top:0">The folder that holds vault.cryptomator. Nothing is copied or moved.</p>'
             f'<label for="vm">The AI may</label><select id="vm" name="mode">{mode_opts}</select>'
             '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form></section>'
@@ -565,7 +566,7 @@ def settings(d: dict) -> str:
             '<label for="cn" style="margin-top:0">Name</label>'
             '<input id="cn" type="text" name="name" required maxlength="60" placeholder="Private">'
             '<label for="cw">Where</label><input id="cw" type="text" name="where" required '
-            f'placeholder="{"/data/vaults" if d["hosted"] else "~/Nextcloud"}">'
+            f'placeholder="{"/vaults" if d["hosted"] else "~/Nextcloud"}">'
             '<p class="note" style="margin-top:0">A folder named after the vault is made there. Put it in a synced folder '
             'to have it on your other devices.</p>'
             + _new_password_fields("c")
@@ -753,7 +754,7 @@ def app_access(d: dict) -> str:
     body = (f'<section class="card">{_msg(d.get("note", ""), ok=True)}<h1><span class="mark">{esc(d["app"])}</span></h1>'
             f'<form method="post" action="/apps/{quote(d["id"])}">{_csrf(d["csrf"])}'
             f'<fieldset style="margin-top:0"><legend>Vaults it may ask for</legend>{boxes or "<p class=empty>No vaults yet.</p>"}</fieldset>'
-            + _toggle("change", d["change"], "It may change files (every change can be undone)")
+            + _toggle("change", d["change"], "It may change files (every change it makes can be undone)")
             + '<div class="actions"><button class="btn" type="submit">Save</button>'
             '<a class="btn plain" href="/">Back</a></div></form>'
             '<p class="note">Vaults still need your password each time they open; this only decides what it may ask for.</p>'
@@ -809,7 +810,7 @@ def app_login(info: tuple[str, str] | None, req: str, vaults: list[str], error: 
             f'<form method="post" action="/login"><input type="hidden" name="req" value="{esc(req)}">'
             f'<fieldset><legend>Vaults it may ask for</legend>{boxes}</fieldset>'
             '<label class="check"><input type="checkbox" name="change" value="yes">'
-            '<span>It may change files (every change can be undone)</span></label>'
+            '<span>It may change files (every change it makes can be undone)</span></label>'
             '<label for="pp">Passphrase</label>'
             '<input id="pp" type="password" name="passphrase" autocomplete="current-password" required>'
             '<div class="actions"><button class="btn wide" type="submit">Connect</button></div></form>'

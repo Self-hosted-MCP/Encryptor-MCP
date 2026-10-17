@@ -20,14 +20,15 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
     ENCRYPTOR_IDLE_MINUTES  lock after this many minutes without use (default 10)
     ENCRYPTOR_MAX_HOURS     never stay open longer than this (default 12)
     ENCRYPTOR_UNLOCK        auto (the app opens the page, else a native box, else a link), page, box or link
-    ENCRYPTOR_APPROVE       how the person approves deleting for good: auto (a native box, else the app's own
-                            question, else a one-time code), box, ask or code
+    ENCRYPTOR_APPROVE       how the person approves: auto (a native box, else the app's own question, else a
+                            one-time code, never for deleting for good), box, ask or code
     ENCRYPTOR_READ_ONLY     yes: no AI app may change anything in any vault (the control center's switch, fixed)
     ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
     ENCRYPTOR_ASK_BEFORE    also approve these, comma separated: replace, trash, move (default: none; every
                             change can be undone anyway)
     The web version also reads PUBLIC_URL (https://...), LOGIN_HASH or LOGIN_PASSPHRASE, HOST and PORT.
-Vaults, what the AI may do with each, and auto-lock can also be set on the control center; the settings above win.
+Vaults, what the AI may do with each, and auto-lock can also be set on the control center, which wins over the
+settings above (except ENCRYPTOR_READ_ONLY, which always holds).
 
 Every change is logged, keeps what it replaced, and can be undone; see changes.py.
 """
@@ -37,7 +38,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
+import re
 import secrets
 import sys
 import time
@@ -395,7 +398,7 @@ def pages():
 def app_name(ctx: Context | None) -> str:
     try:
         info = ctx.request_context.session.client_params.client_info
-        return auth.app_label(info.title or info.name or "AI app")
+        return auth.app_label(info.title or info.name or os.environ.get("ENCRYPTOR_APP_NAME") or "AI app")
     except Exception:
         return auth.app_label(os.environ.get("ENCRYPTOR_APP_NAME") or "AI app")
 
@@ -482,6 +485,20 @@ def client_ip(peer: str, forwarded: str) -> str:
     return (last if behind_proxy and last else peer)[:64]
 
 
+SECRET_PATHS = re.compile(r"^/(vault|unlock|signin)/[^/?]+")
+
+
+def redact_access_line(record) -> bool:
+    """The server's own request lines leave out the secrets in addresses: the codes in /vault/, /unlock/ and
+    /signin/ links (each one opens a page), and every query string (OAuth codes and states travel there)."""
+    args = record.args
+    if isinstance(args, tuple) and len(args) == 5:
+        path = str(args[2]).split("?", 1)[0]
+        path = SECRET_PATHS.sub(lambda m: f"/{m.group(1)}/<hidden>", path)
+        record.args = (args[0], args[1], path, args[3], args[4])
+    return True
+
+
 def build_server(remote: bool) -> MCPServer:
     """remote: the web version, with the passphrase login for AI apps and the control center at its address."""
     if not remote:
@@ -528,7 +545,13 @@ def add_page_routes(server: MCPServer, site) -> None:
     from starlette.requests import Request
     from starlette.responses import Response
 
+    from urllib.parse import urlparse
+    own = {urlparse(site.base).hostname or "", "127.0.0.1", "localhost"}
+
     async def serve_page(request: Request) -> Response:
+        # Only the server's own name (and local addresses) are answered: no other site's name pointed at this server
+        if (request.url.hostname or "") not in own:
+            return Response("Wrong address.", status_code=421, headers=page_html.HEADERS)
         form = {}
         if request.method == "POST":
             body = await request.body()
@@ -1121,7 +1144,7 @@ def set_passphrase() -> None:
     lines = [l for l in (ENV_FILE.read_text().splitlines() if ENV_FILE.exists() else [])
              if not l.strip().startswith(("LOGIN_HASH=", "LOGIN_PASSPHRASE="))]
     private_write(ENV_FILE, "\n".join(lines + [f"LOGIN_HASH={hash_passphrase(first)}"]) + "\n")
-    print(f"Saved (only its hash) in {ENV_FILE}. Restart the web version to use it.")
+    print(f"Saved (only its hash) in {ENV_FILE}. It works at once; browsers signed in before are signed out.")
 
 
 def serve() -> None:
@@ -1139,6 +1162,7 @@ def serve() -> None:
     if public.startswith("http://"):
         print(f"Note: PUBLIC_URL isn't set, so only this computer can use it ({public}).", file=sys.stderr)
     print(f"Control center: {public}/  ·  AI apps connect to: {public}/mcp", file=sys.stderr)
+    logging.getLogger("uvicorn.access").addFilter(redact_access_line)
     try:
         mcp.run(
             "streamable-http",
@@ -1148,7 +1172,7 @@ def serve() -> None:
                 enable_dns_rebinding_protection=True,
                 allowed_hosts=[host, f"{host}:*", "127.0.0.1:*", "localhost:*"],
                 allowed_origins=[f"https://{host}", "https://claude.ai", "https://claude.com", "https://chatgpt.com",
-                                 "http://localhost:*", "http://127.0.0.1:*"],
+                                 "https://openai.com", "https://vscode.dev", "http://localhost:*", "http://127.0.0.1:*"],
             ),
         )
     finally:

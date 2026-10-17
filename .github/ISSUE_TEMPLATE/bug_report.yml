@@ -1,0 +1,71 @@
+name: Something doesn't work
+description: A bug, an error, or something that behaves wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Issues are public: leave out vault passwords, recovery keys, your passphrase, file names and anything from your files."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked the AI (or did on the control center), and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you run it
+      options:
+        - Claude Desktop extension
+        - On my computer (stdio)
+        - Docker on my own server
+        - On my own server without Docker
+        - Somewhere else
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: Your AI app
+      placeholder: "Claude Code, ChatGPT, Cursor, ..."
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`encryptor-mcp version`, or the About page in the control center"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Computer or server
+      placeholder: "macOS 15, Windows 11, Ubuntu 24.04, ..."
+  - type: input
+    id: where
+    attributes:
+      label: Where the vault lives
+      placeholder: "Nextcloud folder, Dropbox, iCloud Drive, USB drive, rclone, ..."
+  - type: input
+    id: cryptomator
+    attributes:
+      label: Cryptomator version that made the vault (if you know)
+      placeholder: "1.15, ..."
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: What the AI app, the control center or the server's log said. Remove passwords, keys and file names.
+      render: text
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: For example the steps in docs/troubleshooting.md.
+  - type: checkboxes
+    id: private
+    attributes:
+      label: Before posting
+      options:
+        - label: I removed vault passwords, recovery keys, my passphrase, file names and anything from my files
+          required: true

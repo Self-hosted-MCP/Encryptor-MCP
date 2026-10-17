@@ -518,3 +518,22 @@ def test_client_address_behind_the_proxy():
     assert ip("172.18.0.3", "6.6.6.6, 9.9.9.9") == "9.9.9.9"   # Caddy appends the real one last
     assert ip("8.8.8.8", "9.9.9.9") == "8.8.8.8"               # straight from the internet: ignored
     assert ip("127.0.0.1", "") == "127.0.0.1"
+
+
+def test_server_request_lines_hide_secret_addresses():
+    import logging
+    rec = logging.LogRecord("uvicorn.access", 20, "", 0, '%s - "%s %s HTTP/%s" %d',
+                            ("1.2.3.4:5", "GET", "/vault/SeCrEt123/open/a.txt?x=1", "1.1", 200), None)
+    server.redact_access_line(rec)
+    assert rec.args[2] == "/vault/<hidden>/open/a.txt" and "SeCrEt" not in rec.getMessage()
+    for path, shown in (("/unlock/abc", "/unlock/<hidden>"), ("/signin/xyz", "/signin/<hidden>"),
+                        ("/login?req=r&code=c", "/login"), ("/mcp", "/mcp")):
+        rec.args = ("a", "GET", path, "1.1", 200)
+        server.redact_access_line(rec)
+        assert rec.args[2] == shown
+
+
+def test_server_pages_answer_only_their_own_address(hosted):
+    client, _, _ = hosted
+    assert client.get("/", headers={"host": "evil.example"}).status_code == 421
+    assert client.get("/signin", headers={"host": "localhost"}).status_code == 200

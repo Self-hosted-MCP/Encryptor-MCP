@@ -4,7 +4,7 @@
   "display_name": "Encryptor MCP",
   "version": "0.0.0",
   "description": "Open Cryptomator vaults from Claude: read and write files with the vault's own keys. You unlock vaults yourself on a page in your browser, the password never goes through the chat. Every change can be undone.",
-  "long_description": "Open your Cryptomator vaults from Claude Desktop. Claude reads and writes files with the vault's own keys, so they stay encrypted on disk and work in Cryptomator as before.\n\n**You unlock vaults yourself:** when Claude needs a locked vault, a page opens in your browser and you type the password there (on a Mac, a password box can show instead). The password never goes through the chat, and you choose how long the vault stays open. Keys are kept only in memory.\n\nEvery change can be undone. Deleting for good only happens when you empty the trash and approve it yourself.\n\nWorks with Cryptomator vaults. Not made by or affiliated with Cryptomator.",
+  "long_description": "Open your Cryptomator vaults from Claude Desktop. Claude reads and writes files with the vault's own keys, so they stay encrypted on disk and work in Cryptomator as before.\n\n**You unlock vaults yourself:** when Claude needs a locked vault, a page opens in your browser and you type the password there (on a Mac, a password box can show instead). The password never goes through the chat, and you choose how long the vault stays open. Keys are kept only in memory.\n\nEvery change Claude makes can be undone. Deleting for good only happens when you empty the trash and approve it yourself.\n\nWorks with Cryptomator vaults. Not made by or affiliated with Cryptomator.",
   "author": {
     "name": "s17sh70x2jfl031ag",
     "url": "https://github.com/s17sh70x2jfl031ag"

@@ -11,5 +11,5 @@ This product includes:
   desktop app (https://github.com/cryptomator/cryptomator), licensed GPL-3.0. Included so that recovery keys are
   the same in Encryptor MCP and in Cryptomator.
 
-The tests check compatibility with Cryptomator's own libraries (cryptofs, cryptolib, AGPL-3.0), which they fetch from
+The compatibility tests use the cryptofs and cryptolib libraries (AGPL-3.0), which they fetch from
 Maven Central or read from an installed Cryptomator.app; those libraries are not part of this package.

@@ -65,7 +65,7 @@ The command is now `encryptor-mcp`. Your app starts it with the argument `stdio`
 
 Desktop apps sometimes can't find commands that your terminal finds. Get the full path once:
 
-- Mac and Linux: `which encryptor-mcp` (usually `/Users/you/.local/bin/encryptor-mcp`)
+- Mac and Linux: `which encryptor-mcp` (usually `/Users/you/.local/bin/encryptor-mcp` on a Mac, `/home/you/.local/bin/encryptor-mcp` on Linux)
 - Windows: `where encryptor-mcp`
 
 Use that full path wherever you see `/full/path/to/encryptor-mcp` below.
@@ -127,7 +127,7 @@ You add the connector on the website, and the phone app picks it up.
 
 1. On [claude.ai](https://claude.ai), open **Settings → Connectors**.
 2. Click **Add custom connector**. Name: `Encryptor MCP`. URL: `https://your-domain/mcp`.
-3. Click **Connect**. The login page opens: tick the vaults Claude may ask for, choose whether it may change files, type your server passphrase and click **Allow access**.
+3. Click **Connect**. The login page opens: tick the vaults Claude may ask for, choose whether it may change files, type your server passphrase and click **Connect**.
 4. In a chat, turn the connector on from the tools menu.
 5. Open the Claude phone app: the connector is already there.
 
@@ -136,7 +136,7 @@ You add the connector on the website, and the phone app picks it up.
 
 ## ChatGPT
 
-ChatGPT connects over the internet, through **developer mode**. Which plans can use it, and whether it allows changes (write actions), changes over time: check [OpenAI's developer mode page](https://help.openai.com/en/articles/12584461) for your plan.
+ChatGPT connects over the internet, through **developer mode**. Which plans can use it, and whether it allows changes (write actions), varies over time. Check [OpenAI's developer mode page](https://help.openai.com/en/articles/12584461) for your plan.
 
 1. **Settings → Apps & Connectors → Advanced settings →** turn on **Developer mode**.
 2. **Create** a connector. URL: `https://your-domain/mcp`. Authentication: **OAuth**.
@@ -285,7 +285,7 @@ MCP Servers icon → Configure → **Configure MCP Servers** opens `cline_mcp_se
 { "mcpServers": { "encryptor": { "command": "encryptor-mcp", "args": ["stdio"], "disabled": false, "autoApprove": [] } } }
 ```
 
-Over the internet: `"encryptor": { "type": "streamableHttp", "url": "https://your-domain/mcp" }`. Set `type` to `streamableHttp`: left out, Cline uses the older SSE. In the Cline CLI, `cline mcp` has "Run or rerun browser authorization" for the login. ([Cline docs](https://docs.cline.bot/mcp/configuring-mcp-servers))
+Over the internet: `"encryptor": { "type": "streamableHttp", "url": "https://your-domain/mcp" }`. Set `type` to `streamableHttp`. Without it, Cline uses the older SSE. In the Cline CLI, `cline mcp` has "Run or rerun browser authorization" for the login. ([Cline docs](https://docs.cline.bot/mcp/configuring-mcp-servers))
 
 ## Roo Code
 
@@ -473,11 +473,27 @@ Ask your AI: *"Which Encryptor vaults can you see?"* It should list your vaults.
 
 ## Give it a name on the unlock page
 
-The unlock page shows which app is asking. Most apps send their own name. If yours shows up as "AI app", set `ENCRYPTOR_APP_NAME` in the app's `env` block (for example `"Claude Code"`).
+The unlock page shows which app is asking. Most apps send their own name. If yours sends none, it shows up as "AI app". Then set `ENCRYPTOR_APP_NAME` in the app's `env` block (for example `"Claude Code"`): it's used only when the app sends no name. It has to be in the `env` block, because Encryptor doesn't read it from the settings file.
 
 ## If the login page refuses your app
 
-This is only for the internet way. Only apps from a list of known addresses may receive the login: Claude, ChatGPT, OpenAI and VS Code on the web, plus any app on your own computer (localhost), which covers most desktop and command-line apps above. If another app shows "Redirect not allowed", add its domain to `ALLOWED_REDIRECT_HOSTS` in your server's settings.
+This is only for the internet way. Only apps from a list of known addresses may receive the login: Claude, ChatGPT, OpenAI and VS Code on the web (and their subdomains), plus any app on your own computer (localhost), which covers most desktop and command-line apps above. The default list is:
+
+```
+claude.ai,claude.com,chatgpt.com,openai.com,vscode.dev
+```
+
+If another app shows "Redirect not allowed" and it returns to an `https://` address, add its domain to `ALLOWED_REDIRECT_HOSTS` in your server's `.env`. Apps that return to their own link type (like `cursor://`) can't be allowed this way: connect them on the same computer instead. This setting **replaces** the default list, so copy the defaults and add yours at the end:
+
+```
+ALLOWED_REDIRECT_HOSTS=claude.ai,claude.com,chatgpt.com,openai.com,vscode.dev,openclaw.example.com
+```
+
+Then restart the server (`docker compose up -d`). Apps on your own computer (localhost) are always allowed.
+
+## What we tested
+
+The same-computer way (`stdio`) is tested with the official MCP Python client, in the automated tests on macOS. The app-by-app steps above follow each app's own documentation as of October 2026: we haven't tried each app ourselves yet. We haven't tried the internet way end to end inside Docker either. If a step doesn't match what you see, tell us in a [question](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new?template=question.yml).
 
 ---
 

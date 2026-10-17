@@ -6,7 +6,7 @@
   app may use, and whether it may change files (PassphraseOAuth). Tokens are kept only as fingerprints.
 - The control center (the person's own pages) uses a sign-in cookie (Sessions): on the web version after the
   passphrase, on a computer through a one-time link that Encryptor opens in the person's browser (never shown to
-  the AI). Five wrong passphrases lock sign-ins for 15 minutes.
+  the AI). Five wrong passphrases from one address pause it for 15 minutes; fifty from anywhere pause all.
 Single person, no accounts.
 """
 

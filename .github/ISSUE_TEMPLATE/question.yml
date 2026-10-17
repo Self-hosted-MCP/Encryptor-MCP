@@ -1,0 +1,13 @@
+name: Question or idea
+description: Ask how to do something, or suggest a feature
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: "Issues are public: leave out vault passwords, recovery keys, file names and anything from your files."
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question or idea
+    validations:
+      required: true

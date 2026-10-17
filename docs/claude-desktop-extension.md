@@ -1,13 +1,14 @@
 # Claude Desktop extension
 
-The quickest way on Claude Desktop: one file, no terminal and no settings file. Claude Desktop runs it on your computer, for Claude Desktop only.
+The quickest way on Claude Desktop: one file, no terminal and no settings file. Claude Desktop runs it on your computer, for Claude Desktop only. For other apps see [setup-computer.md](setup-computer.md). For your phone, see [setup-own-server.md](setup-own-server.md).
 
 Works with Cryptomator vaults. Not made by or affiliated with Cryptomator.
 
 ## What you need
 
 - [Claude Desktop](https://claude.ai/download) on Mac, Windows or Linux, recent enough to install extensions (**Settings → Extensions**).
-- One or more Cryptomator vaults on this computer (or in a synced folder it can reach).
+- One or more Cryptomator vaults on this computer, or in a synced folder it can reach ([where-your-vaults-live.md](where-your-vaults-live.md)). No vault yet? You can create one on the control center.
+- An internet connection for the first start.
 
 You don't need a password to install it. Vault passwords are typed only on the unlock page, never in the extension's settings and never in the chat.
 
@@ -23,53 +24,103 @@ You don't need a password to install it. Vault passwords are typed only on the u
    | **Lock after minutes without use** | An open vault locks by itself after this long. 10 by default |
 
 4. Click **Install**, and make sure the extension is turned on.
-5. Start a new chat and ask: *"Open the Encryptor control center."*
+5. Start a new chat and ask: *"Open my Encryptor control center."*
 
 The first start takes a little longer: Claude Desktop sets up the program and its packages once.
 
 ## Add your vaults
 
-Ask Claude to open the control center. It opens in your own browser, on this computer. Add each vault there: a name and the vault's folder (the one with `vault.cryptomator` in it). There you also choose what Claude may do with each vault (everything, read only, or hidden) and how soon it locks.
+The control center opens in your own browser, on this computer, already signed in. Go to **Settings**. Under **Add a vault**, type a **Name** and the **Vault folder** (the one with `vault.cryptomator` in it), choose what **The AI may** do, and press **Add vault**. There you also choose how soon vaults lock.
 
-Vaults in the **Vaults** field of the extension show up there too.
+Vaults from the extension's **Vaults** field show up there too.
 
 ## The first unlock
 
 Ask something like *"What's in my Taxes vault?"*. The vault is locked, so Claude asks to unlock it:
 
-1. A page opens in your browser. It says which vault and why Claude wants it.
-2. You type the vault password there, and choose how long the vault stays open.
-3. Claude carries on.
+1. A page opens in your browser. It says which vault, and why Claude wants it.
+2. You type the vault password there, and choose how long the vault stays open: **15 minutes**, **1 hour**, **Until I lock it** or **Until the AI app closes**.
+3. Press **Unlock**. Claude carries on.
 
-On a Mac, if the page can't open, a native password box shows instead. Either way the password stays on your computer: Claude never sees it, and it never goes through the chat. The keys are kept only in memory, and are wiped when the vault locks or Claude Desktop closes.
+On a Mac, if the page can't open, a password box shows instead. Either way the password stays on your computer: Claude never sees it, and it never goes through the chat. The keys are kept only in memory, and are wiped when the vault locks or Claude Desktop closes.
 
 ## What you get
 
-All 23 tools: list, read, find, write, move, copy, trash, and Cryptomator's health check. Every change is logged and keeps what it replaced. Ask *"what did you change today?"* or *"undo that"*. Deleting for good only happens when you empty the trash, and you approve that yourself, outside the chat.
+All 23 tools ([tools.md](tools.md)): list, read, find, write, move, copy, trash, undo, versions, and the health check. Every change is logged and keeps what it replaced. Ask *"what did you change today?"* or *"undo that"*. Deleting for good only happens when you empty the trash, and you approve that yourself, outside the chat.
+
+When every vault is **Read only** or **Hidden from AI**, the tools that change files are left out, so Claude shows fewer tools. After changing a mode to or from read only, restart Claude Desktop.
 
 ## Change the settings
 
-**Settings → Extensions → Encryptor MCP → Configure**: change the vaults or the minutes, then restart the extension. Most things are easier on the control center.
+**Settings → Extensions → Encryptor MCP → Configure**: change the vaults or the minutes, then restart the extension.
 
-## Where things are kept
+Most things are easier on the control center, and what you save there wins over the extension's fields:
 
-Your vaults stay where they are, encrypted as before, and keep working in Cryptomator. The change log, earlier versions and the control center's settings are in `~/.config/encryptor-mcp/state`. Passwords and keys are never written to disk.
+- Once you press **Save** under **Auto-lock** on the control center, the extension's **Lock after minutes without use** no longer applies.
+- A vault from the **Vaults** field that you rename, move or remove on the control center keeps your change.
+
+All settings: [settings.md](settings.md).
+
+## Where things are
+
+| What | Where |
+|---|---|
+| Your vaults | Where they were, encrypted as before. They keep working in Cryptomator |
+| Changes, earlier versions and the trash | Inside each vault, in the encrypted hidden folder `.encryptor` |
+| The control center's settings, fingerprints and read logs | `~/.config/encryptor-mcp/state` (Windows: `C:\Users\you\.config\encryptor-mcp\state`) |
+| Vault passwords and keys | Nowhere on disk. Keys live in memory only |
 
 ## Update
 
-Download the newest `.mcpb` and open it again. Your vaults, settings and change log stay.
+Download the newest [`encryptor-mcp.mcpb`](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) and open it again. Your vaults, settings and changes stay. See [updates.md](updates.md).
 
 ## Remove
 
-**Settings → Extensions**, then remove **Encryptor MCP**. To remove everything, also delete `~/.config/encryptor-mcp`. Your vaults are not touched.
+**Settings → Extensions**, then remove **Encryptor MCP**. To remove its settings too, delete `~/.config/encryptor-mcp`.
+
+Your vaults are not touched. The `.encryptor` folder stays inside each vault: delete it in Cryptomator if you don't want it.
 
 ## If it doesn't work
 
-- **The tools don't appear:** check the extension is turned on, then start a new chat. Restart Claude Desktop if needed.
-- **No vaults:** open the control center and add one, or fill in **Vaults** under **Configure**.
-- **The unlock page doesn't open:** ask Claude to unlock again. On a Mac a password box shows instead.
-- **Nothing happens, or an error about uv or Python:** Claude Desktop sets these up itself; make sure it's up to date, and that your computer can reach the internet for the first start.
+<details>
+<summary><b>The tools don't appear</b></summary>
+
+Check the extension is turned on, then start a new chat. Restart Claude Desktop if needed.
+
+</details>
+
+<details>
+<summary><b>No vaults</b></summary>
+
+Open the control center and add one, or fill in **Vaults** under **Configure**.
+
+</details>
+
+<details>
+<summary><b>The unlock page doesn't open</b></summary>
+
+Ask Claude to unlock again. On a Mac a password box shows instead.
+
+</details>
+
+<details>
+<summary><b>Nothing happens, or an error about uv or Python</b></summary>
+
+Claude Desktop sets these up itself. Make sure it's up to date, and that your computer can reach the internet for the first start.
+
+</details>
+
+More in [troubleshooting.md](troubleshooting.md).
 
 ## How it's built
 
-The `.mcpb` file is a zip of this project plus [`extension/manifest.json`](../extension/manifest.json). Claude Desktop runs it with uv, from the exact package versions in `uv.lock`, with the command `encryptor-mcp stdio`. To build it yourself: `python3 scripts/build_mcpb.py` (the file lands in `dist/`).
+The `.mcpb` file is a zip of this project plus [`extension/manifest.json`](../extension/manifest.json). Claude Desktop runs it with uv, from the exact package versions in `uv.lock`, with the command `encryptor-mcp stdio`. Each release builds it, checks it with Anthropic's own validator, and attaches it to the release ([the workflow](../.github/workflows/extension.yml)). To build it yourself: `python3 scripts/build_mcpb.py` (the file lands in `dist/`).
+
+## What we tested
+
+| Step | Tested |
+|---|---|
+| The file builds and passes Anthropic's own checker (`mcpb validate`) | Yes |
+| Encryptor itself, over stdio, with the official MCP Python client | Yes (macOS, automated tests) |
+| Installing it in Claude Desktop, the form, the tools loading | Not yet |
+| Windows and Linux | Not yet |
