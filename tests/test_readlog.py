@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The read log: private, encrypted, and any edit, removal or reordering shows."""
+import os
+
 from conftest import FIXTURES, password
 from encryptor_mcp.readlog import ReadLog
 from encryptor_mcp.vault import keys
@@ -24,7 +26,7 @@ def test_entries_and_privacy(tmp_path):
     assert entries[-1]["purpose"] == "sum up the year" and verdict.startswith("Intact: 3 entries")
     raw = log.path.read_text() + log.head_path.read_text()
     assert "Taxes" not in raw and "Claude" not in raw                       # encrypted
-    assert oct(log.path.stat().st_mode)[-3:] == "600"
+    assert os.name == "nt" or oct(log.path.stat().st_mode)[-3:] == "600"   # Windows has no such modes
 
 
 def test_changed_line_is_caught(tmp_path):

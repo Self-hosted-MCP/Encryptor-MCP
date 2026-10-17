@@ -75,7 +75,8 @@ def test_list_is_encrypted_and_tamper_proof(vault, tmp_path):
     fp, t = setup_fp(path, mode, tmp_path)
     fp.record_all()
     raw = fp.path.read_bytes()
-    assert b"hello" not in raw and b"big.bin" not in raw and oct(fp.path.stat().st_mode)[-3:] == "600"
+    assert b"hello" not in raw and b"big.bin" not in raw
+    assert os.name == "nt" or oct(fp.path.stat().st_mode)[-3:] == "600"   # Windows has no such modes
     fp.path.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))
     again, _ = setup_fp(path, mode, tmp_path)
     assert again.recorded == 0 and again.files == {}                    # a changed list is never trusted

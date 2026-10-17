@@ -50,7 +50,7 @@ Two things around Encryptor talk to the internet on their own:
 | AI apps' login keys, remembered sign-ins | Only fingerprints (SHA-256). A copy of the files can't be used to log in |
 | Settings, app names, the sign-in log | Plain text in private files. None of it is secret |
 
-Encryptor's settings, sign-in and log files are owner-only (permissions 600, folders 700). Settings files are written whole, so a crash never leaves half a file; the read log adds one line at a time.
+Encryptor's settings, sign-in and log files are owner-only (permissions 600, folders 700; on Windows, your user folder keeps them private to you). Settings files are written whole, so a crash never leaves half a file; the read log adds one line at a time.
 
 **Never kept anywhere:** vault passwords, the vault's keys (memory only, overwritten on lock), recovery keys.
 
