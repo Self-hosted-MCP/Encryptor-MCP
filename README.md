@@ -105,7 +105,7 @@ More in [docs/how-it-works.md](docs/how-it-works.md).
 | **Passphrase** | A password you make up for your own server. It locks the control center, and you type it once when you connect an AI app over the internet. |
 | **AI app** | Claude, ChatGPT, Cursor, Codex or any app that can use tools through MCP. |
 | **MCP** | Model Context Protocol: how AI apps plug into tools like this one. |
-| **stdio** and **serve** | The two ways to start it. `stdio`: your AI app starts it on the same computer. `serve`: it runs as a website on your own server. |
+| **stdio** and **serve** | The two ways to start it. `stdio`: your AI app starts it on the same computer. `serve`: it runs as a website, on your own server, a hosting company, or your computer with a tunnel for your phone. |
 
 ## Choose how to run it
 
@@ -135,7 +135,7 @@ On a computer, vaults can be in any folder it can reach. On a server, the vault 
 
 **Change.** Write a new file or replace one, add text to the end of a file, make folders, move, rename and copy, and put things in the trash. A move never overwrites anything.
 
-**Undo, versions and trash.** Every change keeps what it replaced. Ask *"what did you change today?"* or *"undo that"*, or press **Undo** on the vault's page. Earlier versions of a file can be put back. Things in the trash come back with undo, until you empty it.
+**Undo, versions and trash.** Every change your AI makes keeps what it replaced. Ask *"what did you change today?"* or *"undo that"*, or press **Undo** on the vault's page. Earlier versions of a file can be put back. Things in the trash come back with undo, until you empty it.
 
 <p align="center"><img src="docs/images/undo.png" alt="Every change your AI makes can be undone: the record of changes, each with an Undo button" width="640"></p>
 
@@ -146,6 +146,10 @@ On a computer, vaults can be in any folder it can reach. On a server, the vault 
 **Show in Finder.** On a Mac, an open vault can show up as a drive in Finder. Changes made there are logged and can be undone, like the AI's.
 
 **Approvals.** Deleting for good (emptying the trash) always needs your OK outside the chat: a box on your Mac, your AI app's own question, or the **Delete for good** button on the vault's page. You can ask for an OK before replacing, trashing or moving too ([settings.md](docs/settings.md)).
+
+**In your language.** The control center and the unlock pages come in 20 languages, and your AI answers in yours ([languages.md](docs/languages.md)).
+
+**On your phone.** Through your own server, a hosting company, or your computer with a free tunnel ([how](docs/setup-computer.md#use-it-from-your-phone)).
 
 All 23 tools: [docs/tools.md](docs/tools.md). Ideas for what to ask: [docs/examples.md](docs/examples.md).
 

@@ -6,7 +6,7 @@ Notes for AI coding agents (Claude Code, Codex, Cursor, Copilot and others) and 
 
 ## What this is
 
-An MCP server that opens Cryptomator vaults (format 8, SIV_GCM and SIV_CTRMAC) for AI apps: it reads and writes the vault folder directly with the vault's own keys. The person unlocks on a page (or a Mac password box); keys live only in memory and lock by themselves. Every change is logged inside the vault, keeps what it replaced and can be undone. It runs two ways:
+An MCP server that opens Cryptomator vaults (format 8, SIV_GCM and SIV_CTRMAC) for AI apps: it reads and writes the vault folder directly with the vault's own keys. The person unlocks on a page (or a Mac password box); keys live only in memory and lock by themselves. Every change an AI app makes is logged inside the vault, keeps what it replaced and can be undone. It runs two ways:
 
 - `stdio`: started by a local AI app. Pages (unlock, vault, browse, control center) on 127.0.0.1, random port. The Claude Desktop extension runs this too.
 - `serve`: streamable HTTP at `/mcp`, with a single-user OAuth server (passphrase, per-app vault grants) and the same pages behind HTTPS.
@@ -29,7 +29,9 @@ src/encryptor_mcp/readlog.py         the encrypted, chained read log
 src/encryptor_mcp/unlock.py          unlock links, sessions, auto-lock, lockouts
 src/encryptor_mcp/auth.py            PassphraseOAuth (web AI apps) and page Sessions
 src/encryptor_mcp/web.py             every page route (framework-free Site.handle), the local page server
-src/encryptor_mcp/pages.py           the HTML and CSS (no scripts)
+src/encryptor_mcp/pages.py           the HTML and CSS (no scripts); every visible text goes through _()
+src/encryptor_mcp/i18n.py            page languages: _(), choosing the language, encryptor-mcp translate
+src/encryptor_mcp/locales/           one JSON file per language (19 plus English in the code)
 src/encryptor_mcp/mount.py           the Finder mount (WebDAV on 127.0.0.1)
 src/encryptor_mcp/ask.py             the Mac password and approval boxes
 src/encryptor_mcp/store.py           owner-only file writes, passphrase hashing, token fingerprints
@@ -39,10 +41,16 @@ tests/conftest.py                    the test vaults, the Java reference runner,
 tests/java/fetch_jars.py             downloads the reference libraries from Maven Central (pinned SHA-256)
 tests/test_leaks.py                  no password or key in any answer, output or file
 tests/test_docs.py                   every link and anchor works, every tool and setting documented, no em dashes
+tests/test_languages.py              every language has every text, with the same placeholders
+tests/test_commands.py               setup, check, help, and the plugin, Railway and Render files
+.claude-plugin/                      the Claude Code plugin and its marketplace entry
+.github/workflows/                   Tests (every push), Docker image and extension (each release), fork updates
 extension/                           the Claude Desktop extension: manifest.json (version filled in at build) and icon.png
 scripts/build_mcpb.py                builds dist/encryptor-mcp-<version>.mcpb
 docs/                                user docs, plain language
-Dockerfile, docker-compose.yml, Caddyfile   the server version (Caddy for HTTPS, optional rclone)
+Dockerfile, docker-compose.yml, Caddyfile, docker-entrypoint.sh   the server version (Caddy for HTTPS, optional rclone)
+railway.json, render.yaml            one-click hosting
+scripts/update.sh                    moves a Docker Compose copy to the newest release
 ```
 
 ## Commands
@@ -51,7 +59,7 @@ Dockerfile, docker-compose.yml, Caddyfile   the server version (Caddy for HTTPS,
 uv sync                                   # install with the test tools
 uv run pytest -q                          # all tests; the compatibility tests are skipped without Java and the libraries
 uv run python tests/java/fetch_jars.py .jars          # the reference libraries, where Cryptomator.app isn't installed
-CRYPTOMATOR_MODS=.jars uv run pytest -q   # the tests with the official reference (Java 25+)
+CRYPTOMATOR_MODS=.jars uv run pytest -q   # with the reference libraries (Java 25+)
 python3 scripts/build_mcpb.py             # build the Claude Desktop extension into dist/
 uv run encryptor-mcp help                 # CLI
 ```
@@ -86,20 +94,21 @@ Public wording: never say Encryptor is tested or checked against Cryptomator (it
 ## How things work
 
 - **Settings:** `config()` reads the `.env` file (`ENCRYPTOR_ENV_FILE`, else `<config folder>/.env`), then non-empty environment variables win. Only keys in `SETTINGS` are taken from the environment; every line of `.env` is read. The control center's `state/settings.json` (`page_settings()`) wins over both for the vault list, names, folders, modes, the default vault and auto-lock; `ENCRYPTOR_READ_ONLY` from the environment or `.env` always holds. `ENCRYPTOR_CONFIG_DIR`, `ENCRYPTOR_DATA_DIR` and `ENCRYPTOR_ENV_FILE` are read from the environment only. `refresh()` applies changes to the running `UnlockManager`.
-- **Unlock:** `unlock` makes a one-time code (`request_unlock()`, 5 minutes, carries no secret). The person gets the page by URL elicitation, the Mac box, or a link the AI shows (`ENCRYPTOR_UNLOCK`). The password goes only to `UnlockManager.unlock()`, which makes a `Session` with the keys and the `Tree`. Five wrong passwords for a vault in 15 minutes pause it. The sweeper locks idle and expired sessions every 15 seconds.
+- **Unlock:** `unlock` makes a one-time code (`request_unlock()`, 5 minutes; it only opens the password page). The person gets the page by URL elicitation, the Mac box, or a link the AI shows (`ENCRYPTOR_UNLOCK`). If the app claims URL elicitation but sending it fails, it falls through to the box or the link. The password goes only to `UnlockManager.unlock()`, which makes a `Session` with the keys and the `Tree`. Five wrong passwords for a vault in 15 minutes pause it. The sweeper locks idle and expired sessions every 15 seconds.
 - **Journal:** `changes.Journal` keeps its records encrypted inside the vault under `/.encryptor`, so they sync with it and Cryptomator shows the folder. Each record says when, which app, why, and how to undo it. Versions and trashed items are moved encrypted, never decrypted. `MAX_CHANGES_PER_MINUTE` is a brake. `after_change` keeps the fingerprint list in step.
 - **Approvals:** `approve()` tries the Mac box, then the app's own question, then (only when `chat_ok`) a one-time code the AI must pass back after asking.
 - **Write tools:** `change_tool()` registers them only when some vault is in `full` mode at startup (or none is set up yet). A mode changed on the page needs a restart of the AI app (or the server) before write tools appear.
 - **Mount:** `mount.py` serves an open vault over WebDAV on 127.0.0.1 at an address with a long random secret, checks each connection belongs to the same Mac user (`lsof`), keeps Finder's junk files in memory, sends every change through the journal (app "Finder"), and unmounts when the vault locks. `ENCRYPTOR_FINDER=off` hides it; it's off in Docker.
 - **Auth:** `PassphraseOAuth` implements the MCP SDK's auth provider. State (clients, token fingerprints, `grants` = vaults and change permission per app) lives in `state/oauth.json`; at most 50 registered apps. Access keys last an hour, refresh keys 90 days and work once. Page sign-ins use `Sessions`: in memory on a computer, `sessions.json` for "remember this browser" on a server.
 - **Public URL:** `auth.public_url()` uses `PUBLIC_URL`, then `RENDER_EXTERNAL_URL`, then `RAILWAY_PUBLIC_DOMAIN`, then `http://localhost:8767`.
-- **MCP SDK:** `mcp>=2.3` (`mcp.server.mcpserver.MCPServer`, `mcp_types`). Tool docstrings are what the AI reads: short, exact, honest about side effects.
+- **MCP SDK:** `mcp>=2.3` (`mcp.server.mcpserver.MCPServer`, `mcp_types`). What the AI reads: `INSTRUCTIONS` (the full guide, sent when an app connects), the tool docstrings (short, exact, honest about side effects), and the short next-step hint at the end of `vaults`.
 
 ## Making changes
 
 - Add or change behaviour → add or change a test in `tests/`. Run `uv run pytest -q` before you finish, with the reference libraries when you touched the vault code.
 - **New setting** → add it to `SETTINGS` in `server.py`, to `.env.example` and to `docs/settings.md` (`tests/test_docs.py` checks the last two).
-- **New tool** → honest `ToolAnnotations` (read only, or `change_tool()` for anything that writes, `destructive=True` for anything final); route changes through the journal; add it to `extension/manifest.json` and `docs/tools.md` (a test checks `docs/tools.md` and the tool count).
+- **New page text** → wrap it in `_()`, then add it to every file in `locales/` (`encryptor-mcp translate <code>`, then `--check`); `tests/test_languages.py` fails otherwise.
+- **New tool** → honest `ToolAnnotations` (read only, or `change_tool()` for anything that writes, `destructive=True` for anything final); route changes through the journal; add it to `extension/manifest.json`, `docs/tools.md` and the guide in `INSTRUCTIONS` (a test checks `docs/tools.md` and the tool count).
 - Changing user-visible behaviour → update the matching page in `docs/` in the same change. Plain, everyday language: short sentences, no jargon, no em dashes. Button labels in the docs must match `pages.py` exactly.
 - GitHub Actions: **Tests** runs on every push to `main` and every pull request (free on a public repository). `docker-image.yml` and `extension.yml` build only for published releases (or a tag run by hand), only in the original repository. `update-from-releases.yml` runs only in forks that opt in with `AUTO_UPDATE=on`. Keep third-party actions pinned to a commit.
 - `Dockerfile`, `docker-compose.yml` and `Caddyfile` are user setup paths. If you change one, re-check [docs/setup-own-server.md](docs/setup-own-server.md).
@@ -111,7 +120,7 @@ When a person asks you to set Encryptor MCP up for them, follow this. The user g
 
 **Before you start**
 
-1. Ask where it should run: their computer (any AI app on it), the Claude Desktop extension, or their own server (for the phone or the Claude and ChatGPT websites). Let them decide. Offer a hosting company (Railway, Render) only if they ask, and say the trade-off first: an open vault's keys sit in its memory, and its vaults live on its disk ([docs/setup-hosting.md](docs/setup-hosting.md)).
+1. Ask where it should run: their computer (any AI app on it), the Claude Desktop extension or Claude Code plugin, their computer plus a free tunnel for the phone ([docs/setup-computer.md](docs/setup-computer.md#use-it-from-your-phone)), or their own server (always on, for the phone and the Claude and ChatGPT websites). Let them decide. Offer a hosting company (Railway, Render) only if they ask, and say the trade-off first: an open vault's keys sit in its memory, and its vaults live on its disk ([docs/setup-hosting.md](docs/setup-hosting.md)).
 2. Tell them any cost before creating anything paid (a server, a domain), and wait for a yes.
 3. Ask which vaults, and for each one whether the AI may change it, only read it, or must never see it. Set the modes on the control center or in `ENCRYPTOR_VAULTS` and `ENCRYPTOR_MODES` ([docs/settings.md](docs/settings.md)).
 
