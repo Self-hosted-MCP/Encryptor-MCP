@@ -183,7 +183,8 @@ def settings_view() -> dict:
             "idle_fixed": bool(cfg.get("ENCRYPTOR_IDLE_MINUTES")),
             "read_only_all": read_only_all(cfg), "read_only_fixed": bool(cfg.get("ENCRYPTOR_READ_ONLY")),
             "allow_purge": allow_purge(), "update_check": bool(page.get("update_check")),
-            "version": current_version(), "update": {**upd, "newer": newer}, "repo": REPO}
+            "version": current_version(), "update": {**upd, "newer": newer}, "repo": REPO,
+            "setup_file": page_html.home(str(ENV_FILE))}
 
 
 def _newer(latest: str, mine: str) -> bool:
@@ -203,7 +204,7 @@ def settings_save(kind: str, form: dict) -> str:
         if row is None:
             raise ValueError(f"No vault called {name!r}.")
         if row["mode_fixed"]:
-            raise ValueError(f"{row['name']}'s mode is set in the settings file, which wins.")
+            raise ValueError(f"{row['name']}'s mode is set in the setup file, which wins over this page.")
         mode = form.get("mode", "")
         if mode not in MODE_NAMES:
             raise ValueError("Choose what the AI may do.")
@@ -236,7 +237,7 @@ def settings_save(kind: str, form: dict) -> str:
     elif kind in ("rename", "path"):
         row = rows.get(name.casefold())
         if row is None or row["from_file"]:
-            raise ValueError("Only vaults added here can be changed here; the others are in the settings file.")
+            raise ValueError("Only vaults added here can be changed here; the others come from the setup file.")
         entry = next(v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() == name.casefold())
         if kind == "rename":
             new = (form.get("new_name") or "").strip()
@@ -306,7 +307,7 @@ def settings_save(kind: str, form: dict) -> str:
                 else "You have the newest version.")
     elif kind == "idle":
         if cfg.get("ENCRYPTOR_IDLE_MINUTES"):
-            raise ValueError("Auto-lock is set in the settings file, which wins.")
+            raise ValueError("Auto-lock is set in the setup file, which wins over this page.")
         try:
             minutes = int(form.get("idle", ""))
         except ValueError:
@@ -555,7 +556,7 @@ def vaults() -> str:
     if lines and read_only_all():
         lines.insert(0, "READ ONLY FOR EVERY AI APP: you can read, but nothing can be changed now.")
     return "\n".join(lines) or ("No vaults yet. The user adds them on the control center (call control_center) "
-                                "or in the settings file.")
+                                "or in the setup file.")
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))

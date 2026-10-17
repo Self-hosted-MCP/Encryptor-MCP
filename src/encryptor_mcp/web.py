@@ -363,7 +363,7 @@ class Site:
         return (400 if error else 200), {}, pages.vault_settings({
             "vault": row, "csrf": sess["csrf"], "note": note, "error": error, "open": s is not None,
             "app": s.app if s else "", "status_code": s.status_code if s else "", "format": fmt,
-            "idle_all": int(m.idle // 60)})
+            "idle_all": int(m.idle // 60), "setup_file": c.view().get("setup_file", "")})
 
     # ------------------------------------------------ AI-app login (a server only)
 

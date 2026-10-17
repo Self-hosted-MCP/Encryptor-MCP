@@ -152,7 +152,7 @@ def test_file_settings_win(local, monkeypatch):
     monkeypatch.setenv("ENCRYPTOR_MODES", "GCM=read")
     csrf = signed_in(client, lp)
     r = client.post("/settings", data={"csrf": csrf, "kind": "mode", "name": "GCM", "mode": "full"}, headers={"origin": lp.base})
-    assert "settings file, which wins" in r.text
+    assert "setup file, which wins" in r.text
 
 
 def test_vault_page_record_undo_and_purge(local):
@@ -288,7 +288,7 @@ def test_per_vault_settings_page(local):
     home = client.get("/").text
     assert 'href="/settings/vault/GCM"' in home and 'href="/settings#add"' in home
     page = client.get("/settings/vault/GCM").text
-    assert "Cryptomator vault format 8, SIV_GCM" in page and "Locked" in page and "only be removed there" in page
+    assert "Cryptomator vault format 8, SIV_GCM" in page and "Locked" in page and "added in the setup file" in page
     client.post("/settings", data={"csrf": csrf, "kind": "add", "name": "Spare", "path": str(v2)}, headers=o)
     page = client.get("/settings/vault/Spare").text
     assert "SIV_CTRMAC" in page and "Remove from the list" in page
@@ -348,7 +348,7 @@ def test_rename_move_own_autolock_and_default(local):
     r = client.post("/settings/vault/Archive", data={"csrf": csrf, "kind": "path", "path": str(v1.parent / "nope")}, headers=o)
     assert r.status_code == 400 and "no vault.cryptomator" in r.text
     r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "X"}, headers=o)
-    assert "settings file" in r.text
+    assert "setup file" in r.text
 
 
 def test_devices_and_sign_in_log(hosted):

@@ -452,7 +452,7 @@ def center_home(d: dict) -> str:
 def _mode_form(v: dict, csrf: str, action: str) -> str:
     opts = "".join(f'<option value="{m}"{" selected" if m == v["mode"] else ""}>{t}</option>' for m, t in MODES)
     if v["mode_fixed"]:
-        return f'<p class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))}, set in the settings file.</p>'
+        return f'<p class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))}, set in the setup file (ENCRYPTOR_MODES).</p>'
     return (f'<form method="post" action="{action}" class="inline">{_csrf(csrf)}'
             f'<input type="hidden" name="kind" value="mode"><input type="hidden" name="name" value="{esc(v["name"])}">'
             f'<select name="mode" aria-label="What the AI may do with {esc(v["name"])}">{opts}</select>'
@@ -480,7 +480,7 @@ def settings(d: dict) -> str:
     idle_opts = "".join(f'<option value="{n}"{" selected" if n == d["idle_minutes"] else ""}>{n} minutes</option>'
                         for n in (5, 10, 15, 30, 60))
     mode_opts = "".join(f'<option value="{m}">{t}</option>' for m, t in MODES)
-    idle = (f'<p class="meta">{d["idle_minutes"]} minutes, set in the settings file.</p>' if d.get("idle_fixed") else
+    idle = (f'<p class="meta">{d["idle_minutes"]} minutes, set in the setup file.</p>' if d.get("idle_fixed") else
             f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="idle">'
             '<label for="idle" style="margin-top:0">Lock a vault after this long without use</label>'
             f'<div class="inline"><select id="idle" name="idle">{idle_opts}</select>'
@@ -489,7 +489,7 @@ def settings(d: dict) -> str:
     safety = (f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="safety">'
               + _toggle("read_only_all", d["read_only_all"],
                         "Read only for every AI app: they can read, but nothing can be changed"
-                        + (" (set in the settings file)" if d["read_only_fixed"] else ""), d["read_only_fixed"])
+                        + (" (set in the setup file)" if d["read_only_fixed"] else ""), d["read_only_fixed"])
               + _toggle("allow_purge", d["allow_purge"],
                         "AI apps may ask to delete the trash for good (you still approve each time)")
               + '<div class="actions"><button class="btn plain" type="submit">Save</button></div></form>')
@@ -610,10 +610,16 @@ def vault_settings(d: dict) -> str:
     default = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="default">'
                + _toggle("on", v.get("default"), "Default vault: the AI uses it when you don't name one")
                + '<div class="actions"><button class="btn plain" type="submit">Save</button></div></form>')
+    setup = esc(d.get("setup_file") or "the setup file")
     if v["from_file"]:
-        place = '<p class="meta">Its name and folder are set in the settings file.</p>'
-        remove = '<p class="meta">This vault is listed in the settings file, so it can only be removed there.</p>'
+        place = remove = ""
+        fixed = ('<section class="card"><h2><span class="mark">Name, folder and removal</span></h2>'
+                 '<p>This vault was added in the setup file, not on this page, so its name and folder can\'t be '
+                 'changed or removed here.</p>'
+                 f'<p class="note" style="margin-top:0">To change it, edit the line ENCRYPTOR_VAULTS in <b>{setup}</b>. '
+                 'Vaults you add on this page can be changed here.</p></section>')
     else:
+        fixed = ""
         place = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="rename">'
                  f'<label for="nn" style="margin-top:0">Name</label><div class="inline">'
                  f'<input id="nn" type="text" name="new_name" required maxlength="60" value="{esc(v["name"])}">'
@@ -641,8 +647,8 @@ def vault_settings(d: dict) -> str:
             f'<label for="vi" style="margin-top:0">Lock it after this long without use</label>'
             f'<div class="inline"><select id="vi" name="idle">{idle_opts}</select>'
             '<button class="btn plain" type="submit">Save</button></div></form></section>'
-            f'<section class="card"><h2><span class="mark">Name and folder</span></h2>{place}</section>'
-            f'<section class="card"><h2><span class="mark">Remove</span></h2>{remove}</section>')
+            + (fixed or f'<section class="card"><h2><span class="mark">Name and folder</span></h2>{place}</section>'
+                        f'<section class="card"><h2><span class="mark">Remove</span></h2>{remove}</section>'))
     return page(f"{v['name']} settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
 
 
