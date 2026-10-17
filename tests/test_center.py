@@ -84,7 +84,8 @@ def csrf_of(html):
 def test_local_center_needs_the_one_time_link(local):
     client, lp, _ = local
     r = client.get("/")
-    assert r.status_code == 200 and "Open your control center" in r.text and "GCM" not in r.text
+    assert r.status_code == 200 and "Open your control center" in r.text
+    assert "/signin/unlock/GCM" in r.text and "Settings" not in r.text and "Lent to" not in r.text and "Lock" not in r.text.replace("Unlock", "")
     assert client.get("/signin/not-a-code").status_code == 410
     link = lp.signin_url().split(lp.base)[1]
     r = client.get(link, follow_redirects=False)
@@ -415,3 +416,24 @@ def test_read_log_on_the_vault_page_only(local):
     assert "Intact: 2 entries" in page
     tools = {t.name for t in asyncio.run(server.mcp.list_tools())}
     assert not any("log" in name for name in tools)                       # no AI tool reads it
+
+
+def test_sign_in_by_unlocking_a_vault(local, monkeypatch):
+    client, lp, (v1, v2) = local
+    monkeypatch.setenv("ENCRYPTOR_VAULTS", f"GCM={v1};Secret={v2}")
+    monkeypatch.setenv("ENCRYPTOR_MODES", "Secret=hidden")
+    server.refresh()
+    page = client.get("/").text
+    assert "Unlock a vault with its password" in page and "GCM" in page and "Secret" not in page
+    o = {"origin": lp.base}
+    assert client.post("/signin/unlock/Secret", headers=o).status_code == 404      # hidden stays hidden
+    r = client.post("/signin/unlock/GCM", headers=o, follow_redirects=False)
+    unlock = r.headers["location"]
+    r = client.post(unlock, data={"password": "wrong-one", "keep": "1h"}, headers=o)
+    assert r.status_code == 401 and "encryptor_center" not in client.cookies
+    r = client.post(client.post("/signin/unlock/GCM", headers=o, follow_redirects=False).headers["location"],
+                    data={"password": PW, "keep": "1h"}, headers=o, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/" and "encryptor_center=" in r.headers["set-cookie"]
+    client.cookies.set("encryptor_center", r.headers["set-cookie"].split(";")[0].split("=", 1)[1])
+    assert "Your vaults" in client.get("/").text and server.manager().status("GCM")
+    assert "vault password" in client.get("/activity").text

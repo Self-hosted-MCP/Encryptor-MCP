@@ -31,6 +31,7 @@ from .auth import Lockout, Sessions
 from .unlock import UnlockManager, UnlockRefused
 
 MAX_FORM = 8 * 1024
+SIGNIN_APP = "You, signing in"   # an unlock started on the sign-in page: unlocking also signs the person in
 VIEWABLE = {"image/png", "image/jpeg", "image/gif", "image/webp"}   # PDFs: download only (no viewer in the sandbox)
 FILE_HEADERS = {   # decrypted files can't run anything, load anything, or reach these pages
     "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; "
@@ -294,11 +295,18 @@ class Site:
         c, m = self.center, self.manager
         head = parts[0] if parts else ""
         if head == "signin":
+            if len(parts) == 3 and parts[1] == "unlock" and method == "POST" and not c.hosted:
+                try:
+                    v = m.spec(unquote(parts[2]))   # never a hidden vault from here
+                except UnlockRefused as exc:
+                    return 404, {}, pages.signin(False, str(exc), self.signin_vaults())
+                return 303, {"Location": f"/unlock/{m.request_unlock(v.name, SIGNIN_APP, '')}"}, ""
             if len(parts) == 2 and method == "GET" and not c.hosted:
                 if c.sessions.use_link(parts[1]):
                     return c.sign_in(headers, how="one-time link")
                 c.sessions.record(False, "expired link", headers.get("user-agent", ""), headers.get("x-client-ip", ""))
-                return 410, {}, pages.signin(False, "This sign-in link expired or was already used.")
+                return 410, {}, pages.signin(False, "This sign-in link expired or was already used.",
+                                             self.signin_vaults())
             if len(parts) == 1 and c.hosted:
                 if method == "GET":
                     return 200, {}, pages.signin(True)
@@ -313,7 +321,7 @@ class Site:
             return 404, {}, pages.message("Not found", "There's nothing here.")
         sess = c.session(headers)
         if sess is None:
-            return 200 if head == "" else 401, {}, pages.signin(c.hosted)
+            return 200 if head == "" else 401, {}, pages.signin(c.hosted, "", self.signin_vaults())
         if method == "POST" and not hmac.compare_digest(form.get("csrf", ""), sess["csrf"]):
             return 403, {}, pages.message("Not allowed", "This form is out of date. Reload the page and try again.")
         if head == "" and method == "GET":
@@ -486,7 +494,7 @@ class Site:
             return 303, {"Location": nxt if _safe_next(nxt) else "/",
                          "Set-Cookie": f"theme={new}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax{secure}"}, ""
         if len(parts) == 2 and parts[0] == "unlock":
-            return self.unlock_page(method, parts[1], form)
+            return self.unlock_page(method, parts[1], form, headers)
         if len(parts) >= 2 and parts[0] == "vault":
             return self.vault_page(method, parts, form, headers)
         if parts[:1] == ["login"] and self.center and self.center.provider:
@@ -495,7 +503,13 @@ class Site:
             return self.center_page(method, parts, form, headers)
         return 404, {}, pages.message("Not found", "There's nothing here.")
 
-    def unlock_page(self, method: str, code: str, form: dict):
+    def signin_vaults(self) -> list[str]:
+        """Vaults offered on a computer's sign-in page (never hidden ones; none on a server)."""
+        if self.center is None or self.center.hosted:
+            return []
+        return [v.name for v in self.manager.vaults.values() if v.mode != "hidden"]
+
+    def unlock_page(self, method: str, code: str, form: dict, headers: dict | None = None):
         m = self.manager
         req = m.describe(code)
         if req is None:
@@ -511,6 +525,8 @@ class Site:
             return 401, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, str(exc),
                                               idle_minutes=int(m.idle // 60),
                                               center=self.center is not None)
+        if req.app == SIGNIN_APP and self.center is not None and not self.center.hosted:
+            return self.center.sign_in(headers or {}, how="vault password")   # in, with that vault open
         return 303, {"Location": f"/vault/{s.status_code}"}, ""
 
 

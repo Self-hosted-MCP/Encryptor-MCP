@@ -695,7 +695,7 @@ def confirm_change(d: dict) -> str:
     return page(d["title"], body, nav=center_nav(d["csrf"], "/settings") if d["csrf"] else "")
 
 
-def signin(hosted: bool, error: str = "") -> str:
+def signin(hosted: bool, error: str = "", vaults: list[str] | None = None) -> str:
     if hosted:
         body = (f'<section class="card">{_msg(error)}<h1><span class="mark">Sign in</span></h1>'
                 '<form method="post" action="/signin"><label for="pp">Passphrase</label>'
@@ -706,11 +706,13 @@ def signin(hosted: bool, error: str = "") -> str:
                 '<p class="note">The passphrase you set for this server. Five wrong tries pause sign-in for 15 minutes.</p>'
                 '</section>')
     else:
+        rows = "".join(f'<li><div class="main"><div class="name">{esc(n)}</div></div>'
+                       f'<form method="post" action="/signin/unlock/{quote(n)}"><button class="btn small" type="submit">'
+                       f'Unlock</button></form></li>' for n in (vaults or []))
         body = (f'<section class="card">{_msg(error)}<h1><span class="mark">Open your control center</span></h1>'
-                '<p>For your safety, this page only opens from your AI app. Just ask it: '
-                '<b>“Open my Encryptor control center.”</b> It opens right here, already signed in.</p>'
-                '<p class="note">Already unlocked a vault? Its page has an “All vaults” link that brings '
-                'you here too.</p></section>')
+                + (f'<p>Unlock a vault with its password to come in:</p><ul class="rows vaults">{rows}</ul>' if rows else "")
+                + '<p class="note">Or just ask your AI app: <b>“Open my Encryptor control center.”</b> '
+                'It opens right here, already signed in.</p></section>')
     return page("Sign in", body)
 
 
