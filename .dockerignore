@@ -1,0 +1,11 @@
+.git
+.venv
+.tools
+.jars
+.impeccable
+**/__pycache__
+.pytest_cache
+tests
+vaults
+rclone
+.env

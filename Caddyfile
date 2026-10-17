@@ -1,0 +1,4 @@
+# Caddy gets and renews the HTTPS certificate for ENCRYPTOR_DOMAIN by itself.
+{$ENCRYPTOR_DOMAIN} {
+	reverse_proxy encryptor:8767
+}

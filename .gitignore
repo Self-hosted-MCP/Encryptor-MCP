@@ -9,3 +9,5 @@ state/
 .jars/
 .impeccable/direction.json
 .impeccable/questions/
+vaults/
+rclone/

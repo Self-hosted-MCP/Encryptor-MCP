@@ -1,0 +1,54 @@
+# Your own server (a VPS or a computer at home). Gives you https://<ENCRYPTOR_DOMAIN> with a free certificate.
+#   1. Point a domain (e.g. vault.example.com) at your server's IP address.
+#   2. Put your vault folders in ./vaults next to this file (synced by Nextcloud, Syncthing, ... or see "rclone"
+#      below), or change the path under volumes.
+#   3. Make a .env file next to this one (see .env.example) with at least:
+#        ENCRYPTOR_DOMAIN=vault.example.com
+#        LOGIN_PASSPHRASE=...          (8+ characters; or run "encryptor-mcp set-passphrase" and use LOGIN_HASH)
+#   4. docker compose up -d
+#   5. Open https://<ENCRYPTOR_DOMAIN>, sign in, add your vaults (/vaults/<name>) on Settings.
+#   6. In your AI app, add the connector https://<ENCRYPTOR_DOMAIN>/mcp
+services:
+  encryptor:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_URL: https://${ENCRYPTOR_DOMAIN:?set ENCRYPTOR_DOMAIN in .env}
+    volumes:
+      - encryptor-data:/data
+      - ./vaults:/vaults
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ENCRYPTOR_DOMAIN: ${ENCRYPTOR_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - encryptor
+
+  # Optional: vaults that live in a cloud (Nextcloud or any WebDAV, S3, Google Drive, Dropbox, ...).
+  # rclone shows that storage as the folder ./vaults, so Encryptor reads and writes it like any folder.
+  # Set it up once with "rclone config" (it writes ./rclone/rclone.conf), name the remote "vaults",
+  # then start everything with: docker compose --profile rclone up -d
+  rclone:
+    profiles: ["rclone"]
+    image: rclone/rclone:1.71
+    restart: unless-stopped
+    command: ["mount", "vaults:", "/vaults", "--vfs-cache-mode", "writes", "--allow-other", "--uid", "10001"]
+    cap_add: [SYS_ADMIN]
+    devices: ["/dev/fuse"]
+    security_opt: ["apparmor:unconfined"]
+    volumes:
+      - ./rclone:/config/rclone
+      - ./vaults:/vaults:shared
+
+volumes:
+  encryptor-data:
+  caddy-data:
