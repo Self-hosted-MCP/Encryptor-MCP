@@ -2,7 +2,7 @@
 
 Each release has a version tag (`vX.Y.Z`), notes on the [releases page](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases), a ready-made Docker image, and the Claude Desktop extension attached. What changed: [CHANGELOG.md](../CHANGELOG.md).
 
-Updates only ever install a published release, never unfinished code.
+The update command, the update script and the ready-made image only ever install a published release. A few ways follow the newest code instead (the `main` branch): Railway's one-click template, `uvx` with `--refresh`, and `git pull`. They're marked below.
 
 ## Know when there's an update
 
@@ -17,10 +17,10 @@ Updates only ever install a published release, never unfinished code.
 | Claude Desktop extension | Download the newest [`encryptor-mcp.mcpb`](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) and open it |
 | On your computer (`uv tool`) | `encryptor-mcp update` (installs the newest release, or says you're up to date), then restart your AI app |
 | Claude Code plugin | `claude plugin marketplace update encryptor`, then restart Claude Code |
-| With `uvx` | Add `--refresh` once to the command, so it fetches the newest code |
-| Docker Compose, built here | `./scripts/update.sh` (moves to the newest release and restarts), or `git pull` and `docker compose up -d --build` |
+| With `uvx` | Add `--refresh` once to the command, so it fetches the newest code (`main`) |
+| Docker Compose, built here | `./scripts/update.sh` (moves to the newest release and restarts). Or, for the newest code: `git checkout main`, `git pull`, then `docker compose up -d --build` |
 | Docker, ready-made image | `docker pull ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:latest`, then start the container again (same `/data` volume) |
-| Railway | **Redeploy** the service |
+| Railway | **Redeploy** the service (the one-click template builds the newest code, `main`) |
 | Render | **Manual Deploy** (it pulls `:latest` again) |
 | Without Docker, on a server | `encryptor-mcp update`, then restart `serve` (for example `sudo systemctl restart encryptor-mcp`) |
 
@@ -91,7 +91,7 @@ Run `crontab -e`, then add:
 
 ### Your own fork on a hosting company
 
-If Railway or Render builds from your fork of this repository, the fork can follow official releases by itself: in your fork, turn on Actions, then add the repository variable `AUTO_UPDATE` = `on` (**Settings → Secrets and variables → Actions → Variables**). Every Monday, [the workflow](../.github/workflows/update-from-releases.yml) merges the newest release into your fork, and your host rebuilds. It never runs in the original repository, and it stops without changing anything if the release conflicts with your own changes.
+If Railway builds from your fork of this repository, the fork can follow official releases by itself: in your fork, turn on Actions, then add the repository variable `AUTO_UPDATE` = `on` (**Settings → Secrets and variables → Actions → Variables**). Every Monday, [the workflow](../.github/workflows/update-from-releases.yml) merges the newest release into your fork, and your host rebuilds. It never runs in the original repository, and it stops without changing anything if the release conflicts with your own changes. GitHub doesn't let it change workflow files, so when a release changes one, update your fork by hand: **Sync fork** on GitHub.
 
 ## Keeping Python up to date
 

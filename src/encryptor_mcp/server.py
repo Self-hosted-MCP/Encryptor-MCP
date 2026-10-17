@@ -28,6 +28,7 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
                             one-time code, never for deleting for good), box, ask or code
     ENCRYPTOR_READ_ONLY     yes: no AI app may change anything in any vault (the control center's switch, fixed)
     ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
+    ENCRYPTOR_LANGUAGE      the pages' language, like de or ja (default: the browser's)
     ENCRYPTOR_ASK_BEFORE    also approve these, comma separated: replace, trash, move (default: none; every
                             change can be undone anyway)
     The web version also reads PUBLIC_URL (https://...), LOGIN_HASH or LOGIN_PASSPHRASE, HOST and PORT.
@@ -1162,7 +1163,9 @@ def run_update() -> None:
     if not _newer(tag.lstrip("v"), current):
         print(f"Up to date ({current}).")
         return
-    uv = shutil.which("uv")
+    # A weekly job (launchd, cron) runs with a short PATH, so also look where uv installs itself
+    uv = shutil.which("uv") or next((str(p) for p in (Path.home() / ".local" / "bin" / "uv", Path.home() / ".cargo" / "bin" / "uv")
+                                     if p.is_file()), None)
     if not uv:
         sys.exit("uv isn't on this computer's PATH. Install uv, or update by hand: see docs/updates.md.")
     print(f"Updating {current} -> {tag} ...")

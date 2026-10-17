@@ -637,7 +637,7 @@ def settings(d: dict) -> str:
             f'<label for="cn" style="margin-top:0">{esc(_("Name"))}</label>'
             f'<input id="cn" type="text" name="name" required maxlength="60" placeholder="{esc(private)}">'
             f'<label for="cw">{esc(_("Where"))}</label><input id="cw" type="text" name="where" required '
-            f'placeholder="{"/vaults" if d["hosted"] else "~/Nextcloud"}">'
+            f'placeholder="{"/data/vaults" if d["hosted"] else "~/Nextcloud"}">'
             '<p class="note" style="margin-top:0">'
             + esc(_("A folder named after the vault is made there. Put it in a synced folder to have it on your other "
                     "devices.")) + '</p>'

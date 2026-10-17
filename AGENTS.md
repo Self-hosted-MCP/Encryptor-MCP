@@ -56,7 +56,7 @@ python3 scripts/build_mcpb.py             # build the Claude Desktop extension i
 uv run encryptor-mcp help                 # CLI
 ```
 
-User commands: `stdio`, `serve`, `setup` (adds vaults from the terminal, no password asked), `check` (settings and vault folders, opens nothing), `update` (installs the newest release with uv), `set-passphrase` (writes `LOGIN_HASH` into the `.env` in the config folder), `version`, `help`.
+User commands: `stdio`, `serve`, `setup` (adds vaults from the terminal, no password asked), `check` (settings and vault folders, opens nothing), `update` (installs the newest release with uv), `translate` (adds or checks a language for the pages), `set-passphrase` (writes `LOGIN_HASH` into the `.env` in the config folder), `version`, `help`.
 
 Also shipped: the Claude Code plugin (`.claude-plugin/`, pinned to the release tag: bump it with each release), `railway.json` and `render.yaml` for hosting companies, `docker-entrypoint.sh` (drops to uid 10001 after giving it `/data`), and `scripts/update.sh` for Docker Compose copies.
 
@@ -72,7 +72,7 @@ These are the product. A change that weakens one needs a very good reason and a 
 4. **Every change an AI app makes is undoable.** Every file change to a vault, from an AI app, Finder or the control center's Undo and Restore, goes through `changes.Journal` (health repairs and password tools don't): it is logged in `/.encryptor/changes`, keeps what it replaced in `/.encryptor/versions` or `/.encryptor/trash`, and can be undone. Replacing a file needs the version seen when it was read; undo refuses when the file changed since. One writer at a time per vault (a thread lock and a lock file in the config folder).
 5. **Deleting for good is never approved in the chat.** Only `empty_trash` deletes for good, and `approve()` calls it with `chat_ok=False`: the person approves in the Mac box, in the AI app's own question (form elicitation), or with the confirm tick and **Delete for good** on the vault's page. Never with a one-time code the AI passes back. The **Safety** switch (`allow_purge`) can turn it off for AI apps. The one-time code is only a last resort for `ENCRYPTOR_ASK_BEFORE` actions, which can be undone anyway.
 6. **Modes and grants are enforced in code.** Every tool finds its vault through `spec_for()` / `session_for()`, which leave out hidden vaults and, on a server, vaults not ticked for the app; the refusal looks the same as a missing vault ("No vault called ..."). Every change goes through `writable()` first (read only for every AI app, the app's grant, read-only mode or session). An invalid mode becomes `read`, the safe one. `ENCRYPTOR_READ_ONLY` from the environment or `.env` always holds, whatever the page says.
-7. **Vaults stay readable by Cryptomator.** Any change to the vault code must keep `tests/test_vault.py`, `test_writer.py`, `test_health.py` and `test_manage.py` green: they run the compatibility checks (`tests/java/RefVault.java`, a JDK and Cryptomator.app or `tests/java/fetch_jars.py`). `masterkey.cryptomator` and `vault.cryptomator` are read as untrusted input: sizes, fields and values are checked before use.
+7. **Vaults stay readable by Cryptomator.** Any change to the vault code must keep `tests/test_vault.py`, `test_writer.py`, `test_health.py` and `test_manage.py` green: they run the compatibility tests (`tests/java/RefVault.java`, with a JDK and the reference libraries from `tests/java/fetch_jars.py`). `masterkey.cryptomator` and `vault.cryptomator` are read as untrusted input: sizes, fields and values are checked before use.
 8. **File contents are data, never instructions.** No code path acts on text from a vault. The AI can't reach `/.encryptor` directly (`changes.clean()` refuses it); it uses the change, version, undo and trash tools.
 9. **The pages have no scripts** and a strict CSP (`pages.HEADERS`). Escape every value with `esc()`. Every POST needs the same-origin check, and control center forms also the CSRF token. The local pages answer only on 127.0.0.1 with a checked `Host`. Sign-in cookies are HttpOnly and SameSite=Strict, and a new passphrase signs every browser out.
 10. **`serve` never starts unsafe.** It needs `LOGIN_HASH` or a `LOGIN_PASSPHRASE` of 8+ characters, and refuses a public address that isn't `https://`. Five wrong passphrases from one address in 15 minutes pause that address; fifty from anywhere pause every sign-in. Redirects go only to localhost and `ALLOWED_REDIRECT_HOSTS`. Tokens and sessions are stored only as fingerprints. App names starting with "You" are marked, so no app can pose as the person.
@@ -111,7 +111,7 @@ When a person asks you to set Encryptor MCP up for them, follow this. The user g
 
 **Before you start**
 
-1. Ask where it should run: their computer (any AI app on it), the Claude Desktop extension, or their own server (for the phone or the Claude and ChatGPT websites). Let them decide. Don't offer a hosting company: vault keys would sit in its memory and the vault folders on its disks ([docs/roadmap.md](docs/roadmap.md)).
+1. Ask where it should run: their computer (any AI app on it), the Claude Desktop extension, or their own server (for the phone or the Claude and ChatGPT websites). Let them decide. Offer a hosting company (Railway, Render) only if they ask, and say the trade-off first: an open vault's keys sit in its memory, and its vaults live on its disk ([docs/setup-hosting.md](docs/setup-hosting.md)).
 2. Tell them any cost before creating anything paid (a server, a domain), and wait for a yes.
 3. Ask which vaults, and for each one whether the AI may change it, only read it, or must never see it. Set the modes on the control center or in `ENCRYPTOR_VAULTS` and `ENCRYPTOR_MODES` ([docs/settings.md](docs/settings.md)).
 
@@ -123,7 +123,7 @@ When a person asks you to set Encryptor MCP up for them, follow this. The user g
 
 **The server must have** (check each one; say clearly if something is missing)
 
-- the Compose setup from this repository (`docker compose up -d --build`; there's no ready-made image yet),
+- the Compose setup from this repository (`docker compose up -d --build`), or the ready-made image `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp`,
 - a domain pointing at the server, set as `ENCRYPTOR_DOMAIN`, so Caddy gets the HTTPS certificate (`PUBLIC_URL` must be `https://`),
 - the vault folders under `./vaults` (a synced folder, or the rclone profile), added on the control center as `/vaults/<name>`,
 - a persistent volume at `/data`,
@@ -140,7 +140,6 @@ When a person asks you to set Encryptor MCP up for them, follow this. The user g
 ## Wanted
 
 - Reading older vaults (format 7, maybe 6).
-- A ready-made Docker image.
 - A background service on a computer, so the control center has a fixed address.
 - A password box on Windows and Linux.
 - See [docs/roadmap.md](docs/roadmap.md).

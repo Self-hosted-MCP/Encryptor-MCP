@@ -5,8 +5,8 @@ them and talks to the person in their own language.
 Every text a person sees on a page is written in English inside _("...") (or N_("...") where it's stored first and
 translated later). A language is a JSON file, locales/<code>.json, mapping each English text to its translation.
 Texts may hold {placeholders} and a few HTML tags; a translation keeps both exactly. Missing texts fall back to
-English, so a half-done language still works. `python -m encryptor_mcp.i18n <code>` makes or updates a file for an
-AI agent (or a person) to fill in, and `python -m encryptor_mcp.i18n --check <code>` checks it.
+English, so a half-done language still works. `encryptor-mcp translate <code>` makes or updates a file for an
+AI agent (or a person) to fill in, and `encryptor-mcp translate --check <code>` checks it.
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ def translate(args: list[str]) -> None:
     check = "--check" in args
     codes = [a for a in args if not a.startswith("--")]
     if len(codes) != 1 or not CODE.fullmatch(codes[0]):
-        sys.exit("Usage: python -m encryptor_mcp.i18n <code>   or   python -m encryptor_mcp.i18n --check <code>"
+        sys.exit("Usage: encryptor-mcp translate <code>   or   encryptor-mcp translate --check <code>"
                  "   (codes like ko, pt-BR, zh-TW)")
     code = codes[0]
     texts = source_texts()
@@ -182,7 +182,7 @@ def translate(args: list[str]) -> None:
     todo = sum(1 for v in data.values() if not v.strip())
     print(f"Saved {path} with {len(data)} texts, {todo} still to translate.")
     print("Fill in each value in that language: natural words, same {placeholders} and HTML tags as the English key.")
-    print(f"Then check it: python -m encryptor_mcp.i18n --check {code}. The pages use it after a restart.")
+    print(f"Then check it: encryptor-mcp translate --check {code}. The pages use it after a restart.")
 
 
 if __name__ == "__main__":

@@ -166,7 +166,11 @@ All 23 tools: [docs/tools.md](docs/tools.md). Ideas for what to ask: [docs/examp
    Or install the Claude Code plugin instead of steps 1 and 2 (it needs uv):
 
    ```
-   /plugin install encryptor-mcp --marketplace s17sh70x2jfl031ag/Encryptor-MCP
+   /plugin marketplace add s17sh70x2jfl031ag/Encryptor-MCP
+   ```
+
+   ```
+   /plugin install encryptor-mcp@encryptor
    ```
 
    Claude Desktop, Cursor, Codex and 23 more apps: [docs/connect-your-ai.md](docs/connect-your-ai.md). Most apps want:

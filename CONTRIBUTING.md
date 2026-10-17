@@ -42,7 +42,7 @@ Then run the tests with that folder:
 CRYPTOMATOR_MODS=.jars uv run pytest -q
 ```
 
-Without Java or the libraries, those tests are skipped, not failed. A change to anything in `src/encryptor_mcp/vault/` or `changes.py` must pass them before it's merged. The recovery key test also needs Cryptomator.app's own code, so it only runs on a Mac with Cryptomator installed.
+Without Java or the libraries, those tests are skipped, not failed. A change to anything in `src/encryptor_mcp/vault/` or `changes.py` must pass them before it's merged. One recovery key test only runs on a Mac with the Cryptomator app installed.
 
 The **Tests** workflow on GitHub runs everything on macOS, Windows and Linux, for every push to `main` and every pull request.
 

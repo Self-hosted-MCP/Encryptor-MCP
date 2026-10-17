@@ -57,7 +57,7 @@ Right-to-left languages (Arabic, Hebrew, Persian) translate the same way. The pa
 
 ## Fix a translation
 
-Your own files in `locales/` win over the ones that come with Encryptor. To fix one text for yourself, run `encryptor-mcp translate de`: it copies the German file into your folder, where you can change any line. Check it with `encryptor-mcp translate --check de`.
+Your own files in `locales/` win over the ones that come with Encryptor. To fix one text for yourself, run `encryptor-mcp translate de`: it copies the German file into your folder, where you can change any line. Check it with `encryptor-mcp translate --check de`, then restart your AI app (or the server) to see it.
 
 To fix it for everyone, open a pull request that changes `src/encryptor_mcp/locales/<code>.json`, or open an issue with the old and new wording. New languages are welcome the same way.
 

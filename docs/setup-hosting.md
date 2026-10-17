@@ -38,7 +38,8 @@ The server finds its public address by itself on Railway and Render. Elsewhere, 
 2. **Variables:** `LOGIN_PASSPHRASE` and `PORT=8767`.
 3. **Volume:** add one, mounted at `/data`.
 4. **Settings → Networking:** generate a public domain on port 8767. **Healthcheck path:** `/health`.
-5. Open `https://<your-app>.up.railway.app` and sign in with your passphrase.
+5. **Redeploy** once, so the server learns its new address.
+6. Open `https://<your-app>.up.railway.app` and sign in with your passphrase.
 
 ## Any other hosting company
 
@@ -58,7 +59,7 @@ The image works on amd64 and arm64. It starts as the user `encryptor` (uid 10001
 ## Then
 
 1. Open `https://your-address` and sign in with your passphrase.
-2. **Settings → Create a new vault:** give it a name and the folder `/data/vaults/<name>`, choose a password, and keep the recovery key it shows you somewhere safe.
+2. **Settings → Create a new vault:** give it a name, put `/data/vaults` under **Where** (it makes a folder named after the vault there), choose a password, and keep the recovery key it shows you somewhere safe.
 3. Choose what the AI may do with each vault ([vaults-and-apps.md](vaults-and-apps.md)).
 4. Connect your AI apps to `https://your-address/mcp`: [connect-your-ai.md](connect-your-ai.md).
 
@@ -71,7 +72,10 @@ Check it works: `https://your-address/health` says `ok`.
 
 ## Updates
 
-`latest` follows the newest release. Redeploy to get it. To stay on one version, use a version tag like `:0.1.0`. See [updates.md](updates.md).
+- **Railway's one-click template** builds this repository's newest code (the `main` branch). **Redeploy** to get it.
+- **Render and the ready-made image:** `latest` follows the newest release. Redeploy to get it. To stay on one version, use a version tag like `:0.1.0`.
+
+See [updates.md](updates.md).
 
 ## What we tested
 
