@@ -299,3 +299,85 @@ def test_per_vault_settings_page(local):
     r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove", "confirm": "yes"}, headers=o)
     assert "Removed Spare" in r.text and "Spare" not in server.vaults()
     assert client.get("/settings/vault/Nope").status_code == 404
+
+
+# ---------------------------------------------------------------- safety, per-vault options, sign-ins, about
+
+def test_read_only_for_all_and_delete_switch(local):
+    client, lp, _ = local
+    csrf = signed_in(client, lp)
+    o = {"origin": lp.base}
+    m = server.manager()
+    m.unlock(m.request_unlock("GCM"), PW)
+    client.post("/settings", data={"csrf": csrf, "kind": "safety", "read_only_all": "yes", "allow_purge": "yes"}, headers=o)
+    assert "READ ONLY FOR EVERY AI APP" in server.vaults() and "Read only for every AI app is on" in client.get("/").text
+    with pytest.raises(ToolError, match="Read only for every AI app"):
+        server.make_folder("GCM", "/x", "t", None)
+    client.post("/settings", data={"csrf": csrf, "kind": "safety"}, headers=o)   # both off
+    assert "READ ONLY" not in server.vaults()
+    with pytest.raises(ToolError, match="switched off for AI apps"):
+        asyncio.run(server.empty_trash("GCM", "t", None))
+
+
+def test_lock_all_from_the_center(local):
+    client, lp, (v1, v2) = local
+    csrf = signed_in(client, lp)
+    m = server.manager()
+    m.unlock(m.request_unlock("GCM"), PW)
+    assert "Lock all" in client.get("/").text
+    r = client.post("/vaults/lock-all", data={"csrf": csrf}, headers={"origin": lp.base})
+    assert "Every vault is locked" in r.text and not m.sessions
+
+
+def test_rename_move_own_autolock_and_default(local):
+    client, lp, (v1, v2) = local
+    csrf = signed_in(client, lp)
+    o = {"origin": lp.base}
+    client.post("/settings", data={"csrf": csrf, "kind": "add", "name": "Spare", "path": str(v2)}, headers=o)
+    base = "/settings/vault/Spare"
+    r = client.post(base, data={"csrf": csrf, "kind": "vault_idle", "idle": "30"}, headers=o)
+    assert "locks after 30 minutes" in r.text
+    m = server.manager()
+    assert m.idle_for(m.spec("Spare")) == 30 * 60 and m.idle_for(m.spec("GCM")) == 10 * 60
+    r = client.post(base, data={"csrf": csrf, "kind": "default", "on": "yes"}, headers=o)
+    assert "default vault" in r.text and "Spare: locked  [default" in server.vaults()
+    s = m.unlock(m.request_unlock("Spare"), "test-password-SIV_CTRMAC")
+    r = client.post(base, data={"csrf": csrf, "kind": "rename", "new_name": "Archive"}, headers=o)
+    assert "Renamed Spare to Archive" in r.text and m.status("Archive") is None and set(s.key.enc) == {0}
+    assert "Archive: locked  [default" in server.vaults() and m.idle_for(m.spec("Archive")) == 30 * 60
+    r = client.post("/settings/vault/Archive", data={"csrf": csrf, "kind": "path", "path": str(v1.parent / "nope")}, headers=o)
+    assert r.status_code == 400 and "no vault.cryptomator" in r.text
+    r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "X"}, headers=o)
+    assert "settings file" in r.text
+
+
+def test_devices_and_sign_in_log(hosted):
+    client, provider, _ = hosted
+    o = {"origin": "http://localhost"}
+    client.post("/signin", data={"passphrase": "wrong-wrong"}, headers=o)
+    other = TestClient(client.app, base_url="http://localhost")
+    other.post("/signin", data={"passphrase": PASS}, headers={**o, "user-agent": "Mozilla/5.0 (iPhone) Safari/605"})
+    r = client.post("/signin", data={"passphrase": PASS, "remember": "yes"}, headers=o, follow_redirects=False)
+    assert "Max-Age=7776000" in r.headers["set-cookie"]
+    page = client.get("/settings").text
+    assert "Safari on iPhone" in page and "this browser" in page and "remembered 90 days" in page
+    assert "Refused" in page and "Signed in" in page and PASS not in page
+    assert "http://localhost/mcp" in page                       # the address to give AI apps
+    csrf = csrf_of(page)
+    client.post("/devices/others/signout", data={"csrf": csrf}, headers=o)
+    assert other.get("/").text.count("Passphrase") >= 1        # the other browser is signed out
+    assert server._center.sessions.path.exists()                # remembered sign-ins survive a restart
+    assert PASS not in server._center.sessions.log_path.read_text()
+
+
+def test_about_and_update_check(local, monkeypatch):
+    client, lp, _ = local
+    csrf = signed_in(client, lp)
+    page = client.get("/settings").text
+    assert "AGPL-3.0" in page and "Report a security problem privately" in page and "Not made by or affiliated" in page
+    import io, json as _json, urllib.request
+    monkeypatch.setattr(server, "current_version", lambda: "0.1.0")
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda req, timeout=5: io.BytesIO(_json.dumps({"tag_name": "v0.2.0", "html_url": "https://x"}).encode()))
+    r = client.post("/settings", data={"csrf": csrf, "kind": "check_now"}, headers={"origin": lp.base})
+    assert "Version 0.2.0 is available" in r.text

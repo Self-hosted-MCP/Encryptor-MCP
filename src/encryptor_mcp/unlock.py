@@ -40,6 +40,7 @@ class VaultSpec:
     name: str
     path: Path
     mode: str = "full"          # full, read or hidden
+    idle_minutes: float | None = None   # its own auto-lock time, or None for the one set for all vaults
 
 
 @dataclass
@@ -231,13 +232,17 @@ class UnlockManager:
             for name, s in list(self.sessions.items()):
                 if now >= s.expires:
                     self.lock(s.vault.name, "locked: time is up")
-                elif now - s.last_used >= self.idle:
-                    self.lock(s.vault.name, f"locked: no use for {int(self.idle // 60)} minutes")
+                elif now - s.last_used >= self.idle_for(s.vault):
+                    self.lock(s.vault.name, f"locked: no use for {int(self.idle_for(s.vault) // 60)} minutes")
 
     def seconds_left(self, s: Session) -> int:
         """Until the vault locks by itself: the sooner of the idle limit and the time chosen."""
         now = self.clock()
-        return max(0, int(min(s.expires - now, s.last_used + self.idle - now)))
+        return max(0, int(min(s.expires - now, s.last_used + self.idle_for(s.vault) - now)))
+
+    def idle_for(self, v: VaultSpec) -> float:
+        """Seconds without use before this vault locks: its own setting, or the one for all vaults."""
+        return v.idle_minutes * 60 if v.idle_minutes else self.idle
 
     def start_sweeper(self, every: float = 15.0) -> threading.Thread:
         def loop():

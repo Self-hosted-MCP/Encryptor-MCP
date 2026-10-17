@@ -22,6 +22,7 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
     ENCRYPTOR_UNLOCK        auto (the app opens the page, else a native box, else a link), page, box or link
     ENCRYPTOR_APPROVE       how the person approves deleting for good: auto (a native box, else the app's own
                             question, else a one-time code), box, ask or code
+    ENCRYPTOR_READ_ONLY     yes: no AI app may change anything in any vault (the control center's switch, fixed)
     ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
     ENCRYPTOR_ASK_BEFORE    also approve these, comma separated: replace, trash, move (default: none; every
                             change can be undone anyway)
@@ -59,12 +60,16 @@ CONFIG_DIR = Path(os.environ.get("ENCRYPTOR_CONFIG_DIR") or Path.home() / ".conf
 ENV_FILE = Path(os.environ.get("ENCRYPTOR_ENV_FILE") or CONFIG_DIR / ".env").expanduser()
 SETTINGS = ("ENCRYPTOR_VAULTS", "ENCRYPTOR_MODES", "ENCRYPTOR_IDLE_MINUTES", "ENCRYPTOR_MAX_HOURS", "ENCRYPTOR_UNLOCK",
             "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER", "PUBLIC_URL", "LOGIN_HASH",
-            "LOGIN_PASSPHRASE", "HOST", "PORT", "RENDER_EXTERNAL_URL", "RAILWAY_PUBLIC_DOMAIN", "ALLOWED_REDIRECT_HOSTS")
+            "LOGIN_PASSPHRASE", "HOST", "PORT", "RENDER_EXTERNAL_URL", "RAILWAY_PUBLIC_DOMAIN", "ALLOWED_REDIRECT_HOSTS",
+            "ENCRYPTOR_READ_ONLY")
 STATE_DIR = Path(os.environ.get("ENCRYPTOR_DATA_DIR") or CONFIG_DIR / "state").expanduser()
 PAGE_FILE = STATE_DIR / "settings.json"    # vaults, modes and auto-lock chosen on the control center
 OAUTH_FILE = STATE_DIR / "oauth.json"      # the web version's connected AI apps (tokens only as fingerprints)
 MODE_NAMES = ("full", "read", "hidden")
 IDLE_CHOICES = (5, 10, 15, 30, 60)
+REPO = "s17sh70x2jfl031ag/Encryptor-MCP"
+UPDATE_FILE = STATE_DIR / "update.json"
+CHECK_EVERY = 24 * 3600
 MAX_READ_CHARS = 200_000
 MAX_WRITE_CHARS = 5_000_000
 APPROVAL_TTL = 300
@@ -97,6 +102,8 @@ def vault_rows(cfg: dict) -> list[dict]:
             file_modes[name.strip().casefold()] = mode.strip().lower() if mode.strip().lower() in MODE_NAMES else "read"
     page = page_settings()
     page_modes = {k.casefold(): v for k, v in (page.get("modes") or {}).items() if v in MODE_NAMES}
+    page_idle = {k.casefold(): v for k, v in (page.get("vault_idle") or {}).items() if v in IDLE_CHOICES}
+    default = str(page.get("default") or "").casefold()
     rows, seen = [], set()
 
     def add(name: str, path: str, from_file: bool) -> None:
@@ -106,7 +113,8 @@ def vault_rows(cfg: dict) -> list[dict]:
         seen.add(key)
         fixed = key in file_modes
         rows.append({"name": name, "path": str(Path(path).expanduser()), "from_file": from_file, "mode_fixed": fixed,
-                     "mode": file_modes[key] if fixed else page_modes.get(key, "full")})
+                     "mode": file_modes[key] if fixed else page_modes.get(key, "full"),
+                     "idle": page_idle.get(key), "default": key == default})
 
     for item in (cfg.get("ENCRYPTOR_VAULTS") or "").split(";"):
         if "=" in item:
@@ -118,7 +126,40 @@ def vault_rows(cfg: dict) -> list[dict]:
 
 
 def vault_specs(cfg: dict) -> list[VaultSpec]:
-    return [VaultSpec(r["name"], Path(r["path"]), r["mode"]) for r in vault_rows(cfg)]
+    return [VaultSpec(r["name"], Path(r["path"]), r["mode"], r["idle"]) for r in vault_rows(cfg)]
+
+
+def read_only_all(cfg: dict | None = None) -> bool:
+    """No AI app may change anything, in any vault (the settings file's ENCRYPTOR_READ_ONLY wins)."""
+    cfg = cfg if cfg is not None else config()
+    if cfg.get("ENCRYPTOR_READ_ONLY"):
+        return cfg["ENCRYPTOR_READ_ONLY"].strip().lower() in ("1", "yes", "true", "on")
+    return bool(page_settings().get("read_only_all"))
+
+
+def allow_purge() -> bool:
+    """Whether AI apps may ask to delete the trash for good (the person still approves each time)."""
+    return page_settings().get("allow_purge", True) is not False
+
+
+def update_status(force: bool = False) -> dict:
+    """The newest release on GitHub, checked at most once a day and only when the person turned it on."""
+    data = read_json(UPDATE_FILE, {})
+    if not force and (not page_settings().get("update_check") or time.time() - data.get("checked", 0) < CHECK_EVERY):
+        return data
+    import urllib.request
+    data = {"checked": time.time()}
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
+                                     headers={"Accept": "application/vnd.github+json", "User-Agent": APP})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            info = json.loads(r.read().decode())
+        data["latest"] = str(info.get("tag_name", "")).lstrip("v")
+        data["url"] = str(info.get("html_url", ""))
+    except Exception as exc:
+        data["error"] = "No release published yet." if "404" in str(exc) else "Couldn't reach GitHub just now."
+    private_write(UPDATE_FILE, json.dumps(data))
+    return data
 
 
 def idle_minutes(cfg: dict) -> float:
@@ -135,8 +176,20 @@ def refresh() -> None:
 
 def settings_view() -> dict:
     cfg = config()
+    page = page_settings()
+    upd = update_status()
+    newer = bool(upd.get("latest")) and _newer(upd["latest"], current_version())
     return {"vaults": vault_rows(cfg), "idle_minutes": int(idle_minutes(cfg)),
-            "idle_fixed": bool(cfg.get("ENCRYPTOR_IDLE_MINUTES"))}
+            "idle_fixed": bool(cfg.get("ENCRYPTOR_IDLE_MINUTES")),
+            "read_only_all": read_only_all(cfg), "read_only_fixed": bool(cfg.get("ENCRYPTOR_READ_ONLY")),
+            "allow_purge": allow_purge(), "update_check": bool(page.get("update_check")),
+            "version": current_version(), "update": {**upd, "newer": newer}, "repo": REPO}
+
+
+def _newer(latest: str, mine: str) -> bool:
+    def parts(v):
+        return [int(x) if x.isdigit() else 0 for x in v.split(".")[:3]]
+    return parts(latest) > parts(mine)
 
 
 def settings_save(kind: str, form: dict) -> str:
@@ -180,6 +233,77 @@ def settings_save(kind: str, form: dict) -> str:
         page["vaults"] = [v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() != name.casefold()]
         (page.get("modes") or {}).pop(row["name"], None)
         note = f"Removed {row['name']} from the list. Its files weren't touched."
+    elif kind in ("rename", "path"):
+        row = rows.get(name.casefold())
+        if row is None or row["from_file"]:
+            raise ValueError("Only vaults added here can be changed here; the others are in the settings file.")
+        entry = next(v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() == name.casefold())
+        if kind == "rename":
+            new = (form.get("new_name") or "").strip()
+            if not new or len(new) > 60 or any(c in new for c in ";=,/\\"):
+                raise ValueError("Give the vault a short name without ; = , or slashes.")
+            if new.casefold() in rows and new.casefold() != name.casefold():
+                raise ValueError(f"There's already a vault called {new!r}.")
+            entry["name"] = new
+            for key in ("modes", "vault_idle"):
+                if row["name"] in (page.get(key) or {}):
+                    page[key][new] = page[key].pop(row["name"])
+            if str(page.get("default") or "").casefold() == name.casefold():
+                page["default"] = new
+            note = f"Renamed {row['name']} to {new}. If it was open, it locked."
+        else:
+            path = Path((form.get("path") or "").strip()).expanduser()
+            if not (path / "vault.cryptomator").is_file():
+                raise ValueError("That folder has no vault.cryptomator: choose the vault's own folder.")
+            try:
+                keys.read_vault_config_unverified((path / "vault.cryptomator").read_bytes())
+            except keys.VaultError as exc:
+                raise ValueError(f"That vault can't be used: {exc}")
+            entry["path"] = str(path)
+            note = f"{row['name']} now points at the new folder. If it was open, it locked."
+    elif kind == "vault_idle":
+        row = rows.get(name.casefold())
+        if row is None:
+            raise ValueError(f"No vault called {name!r}.")
+        value = form.get("idle", "")
+        if value in ("", "all"):
+            (page.get("vault_idle") or {}).pop(row["name"], None)
+            note = f"{row['name']} uses the auto-lock time set for all vaults."
+        else:
+            try:
+                minutes = int(value)
+            except ValueError:
+                minutes = 0
+            if minutes not in IDLE_CHOICES:
+                raise ValueError("Choose one of the listed times.")
+            page.setdefault("vault_idle", {})[row["name"]] = minutes
+            note = f"Saved: {row['name']} locks after {minutes} minutes without use."
+    elif kind == "default":
+        row = rows.get(name.casefold())
+        if row is None:
+            raise ValueError(f"No vault called {name!r}.")
+        if form.get("on") == "yes":
+            page["default"] = row["name"]
+            note = f"{row['name']} is now the default vault: the AI uses it when no vault is named."
+        else:
+            page.pop("default", None)
+            note = "No default vault now: the AI asks which vault when it isn't clear."
+    elif kind == "safety":
+        if not cfg.get("ENCRYPTOR_READ_ONLY"):
+            page["read_only_all"] = form.get("read_only_all") == "yes"
+        page["allow_purge"] = form.get("allow_purge") == "yes"
+        note = "Saved the safety settings."
+    elif kind == "updates":
+        page["update_check"] = form.get("on") == "yes"
+        note = "Saved: " + ("Encryptor MCP checks GitHub for a new version once a day." if page["update_check"]
+                            else "no update checks.")
+    elif kind == "check_now":
+        private_write(PAGE_FILE, json.dumps(page, indent=1))
+        upd = update_status(force=True)
+        if upd.get("error"):
+            return upd["error"]
+        return (f"Version {upd['latest']} is available." if _newer(upd.get("latest", "0"), current_version())
+                else "You have the newest version.")
     elif kind == "idle":
         if cfg.get("ENCRYPTOR_IDLE_MINUTES"):
             raise ValueError("Auto-lock is set in the settings file, which wins.")
@@ -230,8 +354,16 @@ def center() -> web.Center:
     """The control center (on a computer; the web version makes its own in build_server)."""
     global _center
     if _center is None:
-        _center = web.Center(journal, settings_view, settings_save, hosted=False)
+        _center = web.Center(journal, settings_view, settings_save, hosted=False, lock_all=lock_everything)
     return _center
+
+
+def lock_everything() -> None:
+    """Lock every vault now (the control center's Lock all): Finder mounts go first, then the keys are wiped."""
+    if _mounts:
+        _mounts.unmount_all()
+    if _manager:
+        _manager.lock_all("locked: Lock all on the control center")
 
 
 class HostedPages:
@@ -343,7 +475,8 @@ def build_server(remote: bool) -> MCPServer:
     mark = lambda: hashlib.sha256((config().get("LOGIN_HASH") or config().get("LOGIN_PASSPHRASE") or "").encode()).hexdigest()[:16]
     secure = public.startswith("https://")
     _center = web.Center(lambda s: journal(s), settings_view, settings_save, hosted=True, check=check, lockout=lockout,
-                         provider=provider, secure=secure, mark=mark)
+                         provider=provider, secure=secure, mark=mark, sessions_file=STATE_DIR / "sessions.json",
+                         log_file=STATE_DIR / "signins.json", lock_all=lock_everything)
     _pages = HostedPages(public)
     if secure:   # browsers then always use HTTPS for these pages
         page_html.HEADERS["Strict-Transport-Security"] = "max-age=31536000"
@@ -379,14 +512,16 @@ def add_page_routes(server: MCPServer, site) -> None:
             parsed = parse_qs(body.decode("utf-8", "replace"), keep_blank_values=True)
             form = {k: v[0] for k, v in parsed.items()}
             form["vault_list"] = parsed.get("vault", [])
-        headers = {k.lower(): v for k, v in request.headers.items()}
+        headers = {k.lower(): v for k, v in request.headers.items() if k.lower() != "x-client-ip"}
+        forwarded = (headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        headers["x-client-ip"] = forwarded or (request.client.host if request.client else "")
         status, extra, body = await asyncio.to_thread(site.handle, request.method, request.url.path, form, headers,
                                                       dict(request.query_params))
         return Response(body, status_code=status,
                         headers={**page_html.HEADERS, "Content-Type": "text/html; charset=utf-8", **extra})
 
     for path in ("/", "/theme", "/signin", "/signin/{code}", "/signout", "/settings", "/settings/{rest:path}", "/login", "/vaults/{rest:path}",
-                 "/apps/{rest:path}", "/unlock/{code}", "/vault/{rest:path}"):
+                 "/apps/{rest:path}", "/devices/{rest:path}", "/unlock/{code}", "/vault/{rest:path}"):
         server.custom_route(path, methods=["GET", "POST"])(serve_page)
 
     @server.custom_route("/health", methods=["GET"])
@@ -415,6 +550,10 @@ def vaults() -> str:
                          f"{m.seconds_left(s) // 60} minutes without use (format 8, {s.tree.cipher_combo})")
         else:
             lines.append(f"{spec.name}: locked{' (read only)' if spec.mode == 'read' else ''}")
+        if (page_settings().get("default") or "").casefold() == spec.name.casefold():
+            lines[-1] += "  [default: use it when the user names no vault]"
+    if lines and read_only_all():
+        lines.insert(0, "READ ONLY FOR EVERY AI APP: you can read, but nothing can be changed now.")
     return "\n".join(lines) or ("No vaults yet. The user adds them on the control center (call control_center) "
                                 "or in the settings file.")
 
@@ -607,6 +746,8 @@ def journal(s) -> changes.Journal:
 
 def writable(vault: str):
     s = session_for(vault)
+    if read_only_all():
+        raise ToolError("Read only for every AI app is on in the control center: nothing can be changed now.")
     g = current_grant()
     if g is not None and not g.get("change"):
         raise ToolError(f"This app may only read {s.vault.name}. The user can allow changes when connecting it again.")
@@ -786,6 +927,9 @@ async def empty_trash(vault: str, purpose: str, ctx: Context, item: str = "", co
     """Delete for good: one item from the trash (its id from trash_list), or the whole trash when item is empty.
     This can't be undone, so the user approves it themselves outside the chat. confirm: only when asked for."""
     s = writable(vault)
+    if not allow_purge():
+        raise ToolError("Deleting for good is switched off for AI apps. The user can empty the trash on the control "
+                        "center (call control_center).")
     j = journal(s)
     items = [r for r in j.trash_items() if not item or r["trash"] == item]
     if not items:

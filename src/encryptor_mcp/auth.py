@@ -248,26 +248,59 @@ class PassphraseOAuth:
             self.save()
 
 
+def describe_agent(ua: str) -> str:
+    """A short, plain name for a browser from its User-Agent ("Safari on Mac"); never the whole string."""
+    ua = ua or ""
+    browser = next((name for key, name in (("Edg/", "Edge"), ("OPR/", "Opera"), ("Brave", "Brave"), ("Firefox/", "Firefox"),
+                                           ("Chrome/", "Chrome"), ("Safari/", "Safari")) if key in ua), "A browser")
+    system = next((name for key, name in (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"),
+                                          ("Mac OS X", "Mac"), ("Windows", "Windows"), ("Linux", "Linux")) if key in ua), "")
+    return f"{browser} on {system}" if system else browser
+
+
 class Sessions:
-    """Control center sign-ins: a random cookie, kept only in memory as a fingerprint, each with its own form
-    token. A restart signs everyone out; so does a new passphrase (mark() changes)."""
+    """Control center sign-ins: a random cookie, kept only as a fingerprint, each with its own form token.
+    Normal sign-ins end when the program stops; "remember this device" ones last 90 days and are kept in a file
+    (path) on the web version. A new passphrase (mark() changes) signs everyone out. log_path keeps 7 days of
+    sign-in attempts: when, how, which browser, from where, right or wrong. Never a passphrase."""
 
     TTL = 12 * 3600
+    REMEMBER = 90 * 24 * 3600
     LINK_TTL = 5 * 60
+    LOG_DAYS = 7
 
-    def __init__(self, mark=lambda: ""):
+    def __init__(self, mark=lambda: "", path: Path | None = None, log_path: Path | None = None):
         self.mark = mark
+        self.path, self.log_path = path, log_path
         self.lock = threading.Lock()
-        self.items: dict[str, dict] = {}
+        now = time.time()
+        self.items: dict[str, dict] = {k: v for k, v in (read_json(path, {}) if path else {}).items()
+                                       if v.get("expires", 0) > now}
         self.links: dict[str, float] = {}   # one-time sign-in links (on a computer), as fingerprints
+        self.log: list[dict] = read_json(log_path, []) if log_path else []
 
-    def new(self) -> str:
+    def _save(self) -> None:
+        if self.path:
+            private_write(self.path, json.dumps({k: v for k, v in self.items.items() if v.get("remember")}))
+
+    def record(self, ok: bool, how: str, agent: str = "", ip: str = "") -> None:
+        with self.lock:
+            cutoff = time.time() - self.LOG_DAYS * 86400
+            self.log = [e for e in self.log if e["time"] > cutoff][-300:]
+            self.log.append({"time": time.time(), "ok": ok, "how": how, "agent": describe_agent(agent), "ip": ip[:64]})
+            if self.log_path:
+                private_write(self.log_path, json.dumps(self.log))
+
+    def new(self, remember: bool = False, agent: str = "", ip: str = "") -> str:
         with self.lock:
             now = time.time()
             self.items = {k: v for k, v in self.items.items() if v["expires"] > now}
             token = secrets.token_urlsafe(32)
-            self.items[token_key(token)] = {"expires": now + self.TTL, "csrf": secrets.token_urlsafe(24),
-                                            "pp": self.mark()}
+            self.items[token_key(token)] = {
+                "expires": now + (self.REMEMBER if remember else self.TTL), "csrf": secrets.token_urlsafe(24),
+                "pp": self.mark(), "remember": bool(remember), "since": now, "seen": now,
+                "agent": describe_agent(agent), "ip": ip[:64]}
+            self._save()
             return token
 
     def get(self, token: str) -> dict | None:
@@ -275,12 +308,36 @@ class Sessions:
             return None
         s = self.items.get(token_key(token))
         if s and s["expires"] > time.time() and hmac.compare_digest(s["pp"], self.mark()):
+            if time.time() - s.get("seen", 0) > 60:
+                s["seen"] = time.time()
+                if s.get("remember"):
+                    with self.lock:
+                        self._save()
             return s
         return None
 
     def end(self, token: str) -> None:
         with self.lock:
             self.items.pop(token_key(token), None)
+            self._save()
+
+    def devices(self, token: str) -> list[dict]:
+        """Signed-in browsers, newest first; "id" is a short public handle, "this" marks the asking browser."""
+        mine = token_key(token or "")
+        now = time.time()
+        out = [{"id": k[:16], "this": k == mine, **{f: v.get(f) for f in ("since", "seen", "agent", "ip", "remember")}}
+               for k, v in self.items.items() if v["expires"] > now]
+        return sorted(out, key=lambda d: d["seen"] or 0, reverse=True)
+
+    def end_device(self, device_id: str, token: str = "", others: bool = False) -> int:
+        """Sign out one browser by its handle, or every browser but this one (others=True)."""
+        mine = token_key(token or "")
+        with self.lock:
+            gone = [k for k in self.items if (others and k != mine) or (not others and device_id and k.startswith(device_id))]
+            for k in gone:
+                del self.items[k]
+            self._save()
+            return len(gone)
 
     def new_link(self) -> str:
         """A one-time code for /signin/<code>: works once, for 5 minutes."""

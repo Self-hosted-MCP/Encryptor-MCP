@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 esc = html.escape
 NAME = "Encryptor MCP"
+TAGLINE = "Encrypted vaults for your AI agents. You hold the keys."
 THEME = contextvars.ContextVar("theme", default="light")   # this browser's choice (light unless switched), per request
 HERE = contextvars.ContextVar("here", default="/")         # the page shown, so the theme switch can come back to it
 
@@ -56,7 +57,9 @@ body{margin:0;min-height:100vh;background:var(--desk);color:var(--ink);
 .top{max-width:var(--w,600px);margin:0 auto;padding:28px 20px 14px;display:flex;align-items:center;gap:10px;
   justify-content:space-between;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:9px;color:var(--ink);text-decoration:none;font-weight:650;letter-spacing:-.01em}
-.brand svg{width:22px;height:22px;color:var(--stamp)}
+.brand svg{width:22px;height:22px;color:var(--stamp);align-self:flex-start;margin-top:3px}
+.brand > span{display:flex;flex-direction:column;line-height:1.3}
+.brand small{font-weight:500;font-size:.8125rem;color:var(--ink-2);letter-spacing:0}
 .top nav{display:flex;gap:18px;align-items:center;font-size:.8125rem}
 .top nav a,.top nav button{color:var(--ink-2);text-decoration:none;background:none;border:0;font:inherit;padding:0;cursor:pointer}
 .top nav a:hover,.top nav button:hover,.top nav a[aria-current]{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
@@ -134,6 +137,8 @@ legend{font-weight:600;padding:0;margin:0;line-height:28px}
 .rows{list-style:none;margin:0;padding:0}
 .rows li{display:flex;gap:12px;align-items:center;min-height:56px;padding:0;box-shadow:inset 0 -1px 0 var(--rule)}
 .rows li:last-child{box-shadow:none}
+.rows.vaults li{padding:14px 0;box-shadow:none;border-bottom:1.5px dashed var(--line)}
+.rows.vaults li:last-child{border-bottom:0}
 .rows .main{flex:1;min-width:0}
 .rows .name{font-weight:650;overflow-wrap:anywhere;line-height:28px}
 .rows .meta{color:var(--ink-2);font-size:.8125rem;line-height:28px;overflow-wrap:anywhere}
@@ -231,7 +236,7 @@ def page(title: str, body: str, *, wide: bool = False, nav: str = "") -> str:
             f'<meta name="robots" content="noindex"><meta name="color-scheme" content="{"dark" if dark else "light"}">'
             f'<link rel="icon" href="{FAVICON}">'
             f'<title>{esc(title)} · {NAME}</title><style>{CSS}</style></head><body{width}>{CONTRACT}'
-            f'<header class="top"><span class="brand">{ICONS["tag"]}{NAME}</span><nav>{nav}{theme_switch()}</nav></header>'
+            f'<header class="top"><span class="brand">{ICONS["tag"]}<span>{NAME}<small>{TAGLINE}</small></span></span><nav>{nav}{theme_switch()}</nav></header>'
             f'<main>{body}</main></body></html>')
 
 
@@ -385,6 +390,8 @@ def center_home(d: dict) -> str:
     for v in d["vaults"]:
         name = esc(v["name"])
         tag = {"read": " · the AI may only read", "hidden": " · hidden from the AI"}.get(v["mode"], "")
+        if v["name"] == d.get("default"):
+            tag += " · default"
         if v["open"]:
             meta = (f'<span class="dot on"></span>Lent to {esc(v["app"])}'
                     f'{" · read only" if v["read_only"] and v["mode"] != "read" else ""}{tag}')
@@ -400,9 +407,9 @@ def center_home(d: dict) -> str:
         act += f'<a class="btn small plain" href="/settings/vault/{quote(v["name"])}" aria-label="Settings for {name}">Settings</a>'
         rows.append(f'<li><div class="main"><div class="name">{name}</div><div class="meta">{meta}</div></div>'
                     f'<div class="acts">{act}</div></li>')
-    vaults = (f'<ul class="rows">{"".join(rows)}</ul>' if rows else
+    vaults = (f'<ul class="rows vaults">{"".join(rows)}</ul>' if rows else
               '<p class="empty">No vaults yet. Add the folder of a Cryptomator vault to begin.</p>'
-              '<div class="actions"><a class="btn" href="/settings">Add a vault</a></div>')
+              '<div class="actions"><a class="btn" href="/settings#add">Add a vault</a></div>')
     apps = ""
     if d["hosted"]:
         items = []
@@ -415,9 +422,18 @@ def center_home(d: dict) -> str:
                 + (f'<ul class="rows">{"".join(items)}</ul>' if items else
                    '<p class="empty">None yet. Add this server to your AI app as a connector to begin.</p>')
                 + "</section>")
-    add = '<div class="actions"><a class="btn plain" href="/settings#add">Add a vault</a></div>' if rows else ""
-    body = (f'<section class="card">{_msg(d["note"])}<h1><span class="mark">Your vaults</span></h1>{vaults}{add}'
-            '<p class="note">Your AI app asks for a vault when it needs one. You can also open and lock them here.</p>'
+    any_open = any(v["open"] for v in d["vaults"])
+    actions = ""
+    if rows:
+        actions = ('<div class="actions"><a class="btn plain" href="/settings#add">Add a vault</a>'
+                   + (f'<form method="post" action="/vaults/lock-all">{_csrf(d["csrf"])}'
+                      f'<button class="btn" type="submit">{ICONS["lock"]}Lock all</button></form>' if any_open else "")
+                   + '</div>')
+    banner = ('<p class="msg ok" role="status">Read only for every AI app is on: they can read, not change. '
+              '<a class="link" href="/settings#safety">Change</a></p>' if d.get("read_only_all") else "")
+    body = (f'<section class="card">{_msg(d["note"], ok=True)}{banner}<h1><span class="mark">Your vaults</span></h1>{vaults}{actions}'
+            '<p class="note">Ask your AI to find, read or update your files. You unlock, it works, and every vault '
+            'locks again on its own.</p>'
             f'</section>{apps}')
     return page("Your vaults", body, wide=True, nav=center_nav(d["csrf"], "/"))
 
@@ -432,11 +448,23 @@ def _mode_form(v: dict, csrf: str, action: str) -> str:
             f'<button class="btn small plain" type="submit">Save</button></form>')
 
 
+def _when(ts) -> str:
+    import time as _t
+    return _t.strftime("%d %b %H:%M", _t.localtime(ts)) if ts else ""
+
+
+def _toggle(name: str, on: bool, label: str, disabled: bool = False) -> str:
+    return (f'<label class="check"><input type="checkbox" name="{name}" value="yes"{" checked" if on else ""}'
+            f'{" disabled" if disabled else ""}><span>{label}</span></label>')
+
+
 def settings(d: dict) -> str:
     rows = []
     for v in d["vaults"]:
+        extra = " · default" if v.get("default") else ""
+        idle = f" · locks after {v['idle']} min" if v.get("idle") else ""
         rows.append(f'<li><div class="main"><div class="name">{esc(v["name"])}</div>'
-                    f'<div class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))}</div></div>'
+                    f'<div class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))}{idle}{extra}</div></div>'
                     f'<div class="acts"><a class="btn small plain" href="/settings/vault/{quote(v["name"])}">Settings</a></div></li>')
     idle_opts = "".join(f'<option value="{n}"{" selected" if n == d["idle_minutes"] else ""}>{n} minutes</option>'
                         for n in (5, 10, 15, 30, 60))
@@ -445,11 +473,67 @@ def settings(d: dict) -> str:
             f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="idle">'
             '<label for="idle" style="margin-top:0">Lock a vault after this long without use</label>'
             f'<div class="inline"><select id="idle" name="idle">{idle_opts}</select>'
-            '<button class="btn plain" type="submit">Save</button></div></form>')
+            '<button class="btn plain" type="submit">Save</button></div></form>'
+            '<p class="note" style="margin-top:0">A vault can have its own time in its settings.</p>')
+    safety = (f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="safety">'
+              + _toggle("read_only_all", d["read_only_all"],
+                        "Read only for every AI app: they can read, but nothing can be changed"
+                        + (" (set in the settings file)" if d["read_only_fixed"] else ""), d["read_only_fixed"])
+              + _toggle("allow_purge", d["allow_purge"],
+                        "AI apps may ask to delete the trash for good (you still approve each time)")
+              + '<div class="actions"><button class="btn plain" type="submit">Save</button></div></form>')
+    dev_rows = []
+    for dv in d.get("devices", []):
+        who = esc(dv["agent"] or "A browser") + (" · this browser" if dv["this"] else "")
+        meta = (f'Since {_when(dv["since"])} · last seen {_when(dv["seen"])}'
+                + (f' · {esc(dv["ip"])}' if dv.get("ip") and dv["ip"] != "this computer" else "")
+                + (" · remembered 90 days" if dv.get("remember") else ""))
+        out = ("" if dv["this"] else
+               f'<form method="post" action="/devices/{esc(dv["id"])}/signout">{_csrf(d["csrf"])}'
+               f'<button class="btn small plain" type="submit">Sign out</button></form>')
+        dev_rows.append(f'<li><div class="main"><div class="name">{who}</div><div class="meta">{meta}</div></div>{out}</li>')
+    others = sum(1 for dv in d.get("devices", []) if not dv["this"])
+    devices = (f'<ul class="rows">{"".join(dev_rows)}</ul>'
+               + (f'<form method="post" action="/devices/others/signout">{_csrf(d["csrf"])}<div class="actions">'
+                  '<button class="btn plain" type="submit">Sign out every other browser</button></div></form>' if others else ""))
+    log_rows = "".join(
+        f'<tr><td class="when">{_when(e["time"])}</td><td class="what">{"Signed in" if e["ok"] else "Refused"}'
+        f' · {esc(e["how"])}<small>{esc(e["agent"])}{(" · " + esc(e["ip"])) if e.get("ip") and e["ip"] != "this computer" else ""}'
+        f'</small></td><td></td></tr>' for e in d.get("log", []))
+    log = (f'<table class="record">{log_rows}</table>' if log_rows else '<p class="empty">No sign-ins yet.</p>')
+    upd = d.get("update") or {}
+    if upd.get("newer"):
+        upd_line = (f'<p class="msg ok">Version {esc(upd["latest"])} is available. '
+                    f'<a class="link" href="{esc(upd.get("url") or "https://github.com/" + d["repo"] + "/releases")}">What\'s new</a></p>')
+    elif upd.get("error"):
+        upd_line = f'<p class="meta">{esc(upd["error"])}</p>'
+    elif upd.get("latest"):
+        upd_line = '<p class="meta">You have the newest version.</p>'
+    else:
+        upd_line = ""
+    repo = f'https://github.com/{d["repo"]}'
+    about = (f'<dl class="facts"><dt>Version</dt><dd>{esc(d["version"])}</dd><dt>License</dt><dd>AGPL-3.0</dd></dl>'
+             + upd_line
+             + f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="updates">'
+             + _toggle("on", d["update_check"], "Check GitHub for a new version once a day (only the version number is asked)")
+             + '<div class="actions"><button class="btn plain" type="submit">Save</button></form>'
+             + f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="check_now">'
+               '<button class="btn plain" type="submit">Check now</button></form></div>'
+             + f'<ul class="rows"><li><div class="main"><a class="name link" href="{repo}">Source code</a>'
+               '<div class="meta">Open source under the AGPL-3.0</div></div></li>'
+             + f'<li><div class="main"><a class="name link" href="{repo}/issues/new">Report a problem or ask a question</a>'
+               '<div class="meta">On GitHub</div></div></li>'
+             + f'<li><div class="main"><a class="name link" href="{repo}/security/advisories/new">Report a security problem privately</a>'
+               '<div class="meta">Only the maintainer sees it</div></div></li></ul>'
+             + '<p class="note">Works with Cryptomator vaults. Not made by or affiliated with Cryptomator.</p>')
+    connect = (f'<section class="card"><h2><span class="mark">Connect an AI app</span></h2>'
+               f'<p>Add this address to your AI app as a connector:</p><p class="meta"><b>{esc(d["mcp_url"])}</b></p>'
+               '<p class="note" style="margin-top:0">You type your passphrase once and choose which vaults it may ask for.</p></section>'
+               if d.get("mcp_url") else "")
     body = (f'{_msg(d["error"])}{_msg(d["note"], ok=True)}'
             '<section class="card"><h1><span class="mark">Settings</span></h1>'
             '<h2><span class="mark">Vaults</span></h2>'
-            + (f'<ul class="rows">{"".join(rows)}</ul>' if rows else '<p class="empty">No vaults yet.</p>')
+            + (f'<ul class="rows vaults">{"".join(rows)}</ul>' if rows else '<p class="empty">No vaults yet.</p>')
             + '</section>'
             f'<section class="card" id="add"><h2><span class="mark">Add a vault</span></h2>'
             f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="add">'
@@ -460,31 +544,61 @@ def settings(d: dict) -> str:
             '<p class="note" style="margin-top:0">The folder that holds vault.cryptomator. Nothing is copied or moved.</p>'
             f'<label for="vm">The AI may</label><select id="vm" name="mode">{mode_opts}</select>'
             '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form></section>'
-            f'<section class="card"><h2><span class="mark">Auto-lock</span></h2>{idle}</section>')
+            f'<section class="card"><h2><span class="mark">Auto-lock</span></h2>{idle}</section>'
+            f'<section class="card" id="safety"><h2><span class="mark">Safety</span></h2>{safety}</section>'
+            f'{connect}'
+            f'<section class="card" id="devices"><h2><span class="mark">Signed-in browsers</span></h2>{devices}'
+            f'<h2><span class="mark">Sign-ins, last 7 days</span></h2>{log}</section>'
+            f'<section class="card"><h2><span class="mark">About and help</span></h2>{about}</section>')
     return page("Settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
 
 
 def vault_settings(d: dict) -> str:
-    """One vault's settings: where it is, its format, what the AI may do, and removing it from the list."""
+    """One vault's settings: where it is, its format, what the AI may do, its own auto-lock, default, name, removal."""
     v = d["vault"]
     action = f'/settings/vault/{quote(v["name"])}'
+    hidden = f'{_csrf(d["csrf"])}<input type="hidden" name="name" value="{esc(v["name"])}">'
     status = (f'Open, lent to {esc(d["app"])}. <a class="link" href="/vault/{esc(d["status_code"])}">Go to its page</a>'
               if d["open"] else "Locked")
-    remove = ('<p class="meta">This vault is listed in the settings file, so it can only be removed there.</p>'
-              if v["from_file"] else
-              f'<form method="post" action="{action}">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="remove">'
-              f'<input type="hidden" name="name" value="{esc(v["name"])}">'
-              '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
-              '<span>Remove it from this list. The vault and its files stay where they are.</span></label>'
-              '<div class="actions"><button class="btn plain" type="submit">Remove from the list</button></div></form>')
+    idle_opts = (f'<option value="all"{" selected" if not v.get("idle") else ""}>Same as all vaults ({d["idle_all"]} min)</option>'
+                 + "".join(f'<option value="{n}"{" selected" if n == v.get("idle") else ""}>{n} minutes</option>'
+                           for n in (5, 10, 15, 30, 60)))
+    default = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="default">'
+               + _toggle("on", v.get("default"), "Default vault: the AI uses it when you don't name one")
+               + '<div class="actions"><button class="btn plain" type="submit">Save</button></div></form>')
+    if v["from_file"]:
+        place = '<p class="meta">Its name and folder are set in the settings file.</p>'
+        remove = '<p class="meta">This vault is listed in the settings file, so it can only be removed there.</p>'
+    else:
+        place = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="rename">'
+                 f'<label for="nn" style="margin-top:0">Name</label><div class="inline">'
+                 f'<input id="nn" type="text" name="new_name" required maxlength="60" value="{esc(v["name"])}">'
+                 '<button class="btn small plain" type="submit">Rename</button></div></form>'
+                 f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="path">'
+                 f'<label for="np">Vault folder</label><div class="inline">'
+                 f'<input id="np" type="text" name="path" required value="{esc(home(v["path"]))}">'
+                 '<button class="btn small plain" type="submit">Change</button></div></form>'
+                 '<p class="note" style="margin-top:0">Renaming or moving locks the vault if it\'s open.</p>')
+        remove = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="remove">'
+                  '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
+                  '<span>Remove it from this list. The vault and its files stay where they are, and AI apps can no '
+                  'longer ask for it.</span></label>'
+                  '<div class="actions"><button class="btn plain" type="submit">Remove from the list</button></div></form>')
     body = (f'{_msg(d["error"])}{_msg(d["note"], ok=True)}'
             f'<section class="card"><h1><span class="mark">{esc(v["name"])}</span></h1>'
             f'<dl class="facts"><dt>Status</dt><dd>{status}</dd>'
             f'<dt>Folder</dt><dd class="path" title="{esc(v["path"])}">{esc(home(v["path"]))}</dd>'
-            f'<dt>Format</dt><dd>{esc(d["format"])}</dd></dl>'
-            f'<h2><span class="mark">The AI may</span></h2>{_mode_form(v, d["csrf"], action)}'
+            f'<dt>Format</dt><dd>{esc(d["format"])}</dd></dl></section>'
+            f'<section class="card"><h2><span class="mark">The AI may</span></h2>{_mode_form(v, d["csrf"], action)}'
             '<p class="note" style="margin-top:0">Hidden vaults never show to the AI; you can still open them here.</p>'
-            f'<h2><span class="mark">Remove</span></h2>{remove}</section>')
+            f'{default}</section>'
+            f'<section class="card"><h2><span class="mark">Auto-lock</span></h2>'
+            f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="vault_idle">'
+            f'<label for="vi" style="margin-top:0">Lock it after this long without use</label>'
+            f'<div class="inline"><select id="vi" name="idle">{idle_opts}</select>'
+            '<button class="btn plain" type="submit">Save</button></div></form></section>'
+            f'<section class="card"><h2><span class="mark">Name and folder</span></h2>{place}</section>'
+            f'<section class="card"><h2><span class="mark">Remove</span></h2>{remove}</section>')
     return page(f"{v['name']} settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
 
 
@@ -493,6 +607,8 @@ def signin(hosted: bool, error: str = "") -> str:
         body = (f'<section class="card">{_msg(error)}<h1><span class="mark">Sign in</span></h1>'
                 '<form method="post" action="/signin"><label for="pp">Passphrase</label>'
                 '<input id="pp" type="password" name="passphrase" autocomplete="current-password" autofocus required>'
+                '<label class="check"><input type="checkbox" name="remember" value="yes">'
+                '<span>Remember this browser for 90 days</span></label>'
                 '<div class="actions"><button class="btn wide" type="submit">Sign in</button></div></form>'
                 '<p class="note">The passphrase you set for this server. Five wrong tries pause sign-in for 15 minutes.</p>'
                 '</section>')
