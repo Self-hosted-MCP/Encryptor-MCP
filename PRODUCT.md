@@ -23,13 +23,13 @@ The only way to give an AI access to an end-to-end encrypted Cryptomator vault w
 
 ## Capabilities and Constraints
 - Server-rendered HTML with inline CSS only: no scripts, no external fonts or requests (strict Content Security Policy). Every value escaped.
-- Light and dark (follow the device), phone-friendly, works in any browser.
+- Light by default, with a Dark switch on every page (the device's setting isn't followed, by the maintainer's choice); phone-friendly, works in any browser.
 - Vault modes: full, read, hidden (hidden from the AI only). Read-only sessions.
 - Undo, versions and trash live inside the vault, encrypted.
-- Plain words in English; no jargon on the main path.
+- Plain words, no jargon on the main path. Pages in 20 languages (browser language, or ENCRYPTOR_LANGUAGE); tool answers to AI apps stay English.
 
 ## Brand Commitments
-Name: "Encryptor MCP" everywhere people see it (pages, titles, the app name), not just "Encryptor" (maintainer, 2026-10-16). Repository and package: Encryptor-MCP / encryptor-mcp. No logo, colors or fonts exist yet; the look is open (the maintainer asked for clean, straightforward, slim, smart). Must not imitate Cryptomator's branding. Type: the device's own system UI font, no embedded fonts (decided 2026-10-16 under the maintainer's standing rule to take the safer, simpler option: fast, native on every device, nothing to download; a custom face can be revisited later).
+Name: "Encryptor MCP" everywhere people see it (pages, titles, the app name), not just "Encryptor" (maintainer, 2026-10-16). Repository and package: Encryptor-MCP / encryptor-mcp. Logo (maintainer, 2026-10-16): a friendly round robot head with a white visor and two dark eyes, a small yellow padlock on top, and thin circuit wires out of both sides ending in yellow dots; on a violet rounded tile for the app icon (docs/images/icon.svg, icon.png, favicon), and without the tile, in the page violet, in the pages' top bar. Look: the "Due-date card" world picked by the maintainer: ruled index cards with a red margin line on a light desk, a violet stamp color (#4b3a8f), a yellow highlighter marker under titles (#ffe27a) and a softer lavender one under subtitles (#e6defc); light by default with a Dark switch. Full tokens and rules in DESIGN.md. Type: the device's own system UI font, no embedded fonts (2026-10-16: fast, native on every device, nothing to download). Must not imitate Cryptomator's branding: no Cryptomator logo, colors or wording that suggests it is theirs; "Works with Cryptomator vaults; not made by or affiliated with Cryptomator." Never say it is tested or checked against Cryptomator (maintainer, 2026-10-17).
 
 ## Evidence on Hand
 No users, testimonials or audits yet. Test vaults only (tests/fixtures). Do not claim audits, user counts or certifications.
@@ -37,7 +37,7 @@ No users, testimonials or audits yet. Test vaults only (tests/fixtures). Do not 
 ## Product Principles
 1. Calm and in control: the person should always see at a glance what is open, for how long, and what the AI did.
 2. The password and the keys belong to the person: nothing on a page ever suggests typing a password into the chat.
-3. Everything is reversible except what the person explicitly confirms.
+3. Every change the AI makes is reversible; the only exception, deleting for good, is approved by the person outside the chat.
 4. Simple by default, details on request: one obvious action per screen, expert information present but quiet.
 5. Same everywhere: computer, server and phone show the same pages and words.
 
