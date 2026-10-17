@@ -24,7 +24,7 @@ Never part of any tool: vault passwords, recovery keys, creating vaults, the rea
 | `copy_file` | changes, can be undone | Copy a file to a new name or folder in the same vault (stays encrypted the whole time). |
 | `trash` | changes, can be undone | Put a file or folder in the vault's trash. It stays encrypted in the vault and can be taken back out with undo. Deleting for good is only possible by emptying the trash, which the user approves. |
 | `trash_list` | reads | What's in the vault's trash: each item's id, original path and when it was put there. |
-| `empty_trash` | deletes for good, you approve | Delete for good: one item from the trash (its id from trash_list), or the whole trash when item is empty. This can't be undone, so the user approves it themselves outside the chat. confirm: only when asked for. |
+| `empty_trash` | deletes for good, you approve | Delete for good: one item from the trash (its id from trash_list), or the whole trash when item is empty. This can't be undone, so the user approves it themselves outside the chat. |
 | `recent_changes` | reads | The latest changes in a vault: when, which app, why, and whether they were undone. |
 | `undo` | changes, can be undone | Undo one change (its id from recent_changes), or the latest one. Refuses when the file changed since, so newer work is never lost. |
 | `versions` | reads | Earlier versions of a file kept by its changes, newest first, for restore_version. |

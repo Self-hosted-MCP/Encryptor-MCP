@@ -14,7 +14,7 @@ What Encryptor MCP does to keep your files safe, and to keep you in control.
 - Every change keeps what it replaced, and can be undone from the vault's page or by asking the AI.
 - Files are swapped in at once: never half-written. Two changes never run at the same time.
 - Replacing a file needs the version the AI read: if the file changed since (by you, another app or a sync), nothing is overwritten.
-- Deleted things go to a trash inside the vault. Deleting for good happens only by emptying the trash, and you approve it outside the chat (a box on your screen, your AI app's own question, or at least a code you confirm). You can also switch it off for AI apps.
+- Deleted things go to a trash inside the vault. Deleting for good happens only by emptying the trash, and you approve it outside the chat (a box on your screen, your AI app's own question, or the Purge button on the vault's page; never just a yes in the chat). You can also switch it off for AI apps.
 - Renaming, moving or removing a vault from the list, and repairs, ask twice on the control center.
 - Read only, per vault or for every AI app at once: tools that change files then refuse, or aren't offered at all.
 - No more than 60 changes a minute.

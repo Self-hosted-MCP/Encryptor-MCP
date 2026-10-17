@@ -61,7 +61,7 @@ body{margin:0;min-height:100vh;background:var(--desk);color:var(--ink);
   flex-wrap:wrap}
 .top .brand{margin-right:auto}
 .brand{display:flex;align-items:center;gap:9px;color:var(--ink);text-decoration:none;font-weight:650;letter-spacing:-.01em}
-.brand svg{width:22px;height:22px;color:var(--stamp);align-self:flex-start;margin-top:3px}
+.brand svg{width:46px;height:40px;flex:none;color:var(--stamp)}
 .brand > span{display:flex;flex-direction:column;line-height:1.3}
 .brand small{font-weight:500;font-size:.8125rem;color:var(--ink-2);letter-spacing:0}
 .top nav{display:flex;gap:22px;align-items:center;font-size:1rem;margin-left:auto;flex-wrap:wrap}
@@ -208,8 +208,6 @@ summary{cursor:pointer;font-weight:600;color:var(--red);width:max-content;max-wi
 
 _SVG = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
 ICONS = {
-    "tag": f'<svg {_SVG} stroke-width="1.9"><path d="M3.5 10.6V4.5a1 1 0 0 1 1-1h6.1l9.7 9.7a1 1 0 0 1 0 1.4'
-           'l-6.1 6.1a1 1 0 0 1-1.4 0z"/><circle cx="8" cy="8" r="1.6"/></svg>',
     "lock": f'<svg {_SVG} stroke-width="1.9"><rect x="5" y="10.5" width="14" height="10" rx="1.5"/>'
             '<path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>',
     "open": f'<svg {_SVG} stroke-width="1.9"><rect x="5" y="10.5" width="14" height="10" rx="1.5"/>'
@@ -225,10 +223,18 @@ ICONS = {
             '<path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
 }
 
-FAVICON = ("data:image/svg+xml," + quote(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4b3a8f" stroke-width="2.2" '
-    'stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.6V4.5a1 1 0 0 1 1-1h6.1l9.7 9.7a1 1 0 0 1 0 1.4'
-    'l-6.1 6.1a1 1 0 0 1-1.4 0z"/><circle cx="8" cy="8" r="1.6"/></svg>'))
+# The app icon (also docs/images/icon.svg): a robot with a padlock, wired to its apps.
+MARK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5.4" fill="#4b3a8f"/><g fill="none" stroke="#fdfdfb" stroke-width=".7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 15.2H4v2.3H2.9M18.6 14.4H20v-2.3h1.1"/></g><g fill="#ffe27a"><circle cx="2.7" cy="17.5" r=".8"/><circle cx="21.3" cy="12.1" r=".8"/></g><rect x="5.2" y="8" width="13.6" height="12" rx="6" fill="#fdfdfb"/><rect x="7.1" y="11.6" width="9.8" height="4.4" rx="2.2" fill="#1b2130"/><circle cx="10.2" cy="13.8" r=".95" fill="#ffe27a"/><circle cx="13.8" cy="13.8" r=".95" fill="#ffe27a"/><path d="M10.7 6.4V5.3a1.3 1.3 0 0 1 2.6 0v1.1" fill="none" stroke="#ffe27a" stroke-width="1.05"/><rect x="9.6" y="6.05" width="4.8" height="3.55" rx=".95" fill="#ffe27a"/></svg>'
+FAVICON = "data:image/svg+xml," + quote(MARK)
+# The same robot for the top bar, without its tile: it takes the page's violet (lighter in dark mode).
+BRAND = ('<svg aria-hidden="true" viewBox="1.4 3 21.2 18.2"><g fill="none" stroke="currentColor" stroke-width=".7" '
+         'stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 15.2H4v2.3H2.9M18.6 14.4H20v-2.3h1.1"/></g>'
+         '<g fill="#e8b923"><circle cx="2.7" cy="17.5" r=".8"/><circle cx="21.3" cy="12.1" r=".8"/></g>'
+         '<rect x="5.2" y="8" width="13.6" height="12" rx="6" fill="currentColor"/>'
+         '<rect x="7.1" y="11.6" width="9.8" height="4.4" rx="2.2" fill="#fdfdfb"/>'
+         '<circle cx="10.2" cy="13.8" r=".95" fill="#1b2130"/><circle cx="13.8" cy="13.8" r=".95" fill="#1b2130"/>'
+         '<path d="M10.7 6.4V5.3a1.3 1.3 0 0 1 2.6 0v1.1" fill="none" stroke="#e8b923" stroke-width="1.05"/>'
+         '<rect x="9.6" y="6.05" width="4.8" height="3.55" rx=".95" fill="#e8b923"/></svg>')
 
 KEEP_LABELS = [("15m", "15 minutes"), ("1h", "1 hour"), ("lock", "Until I lock it"), ("app", "Until the AI app closes")]
 MODES = [("full", "Read and change"), ("read", "Read only"), ("hidden", "Hidden from AI")]
@@ -251,7 +257,7 @@ def page(title: str, body: str, *, wide: bool = False, nav: str = "") -> str:
             f'<meta name="robots" content="noindex"><meta name="color-scheme" content="{"dark" if dark else "light"}">'
             f'<link rel="icon" href="{FAVICON}">'
             f'<title>{esc(title)} · {NAME}</title><style>{CSS}</style></head><body{width}>{CONTRACT}'
-            f'<header class="top"><span class="brand">{ICONS["tag"]}<span>{NAME}<small>{TAGLINE}</small></span></span><nav>{nav}</nav>{theme_switch()}</header>'
+            f'<header class="top"><span class="brand">{BRAND}<span>{NAME}<small>{TAGLINE}</small></span></span><nav>{nav}</nav>{theme_switch()}</header>'
             f'<main>{body}</main></body></html>')
 
 
@@ -278,10 +284,9 @@ def _csrf(token: str) -> str:
 # ---------------------------------------------------------------- unlocking
 
 def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", idle_minutes: int = 10,
-                center: bool = False) -> str:
+                center: bool = False, by_person: bool = False) -> str:
     keep = "".join(f'<label><input type="radio" name="keep" value="{v}"{" checked" if v == "lock" else ""}>'
                    f'<span>{esc(t)}</span></label>' for v, t in KEEP_LABELS)
-    by_person = app.startswith("You")
     body = (f'<section class="card">{_msg(error)}'
             f'<div class="headline"><h1><span class="mark">Unlock {esc(vault)}</span></h1><span class="stamp locked">Locked</span></div>'
             + ("" if by_person else

@@ -36,7 +36,7 @@ from .store import check_passphrase, private_write, read_json, token_key
 
 MIN_PASSPHRASE = 8
 SCOPE = "encryptor"
-FAIL_WINDOW, FAIL_LIMIT = 15 * 60, 5
+FAIL_WINDOW, FAIL_LIMIT, FAIL_LIMIT_ALL = 15 * 60, 5, 50
 
 
 def passphrase_ok(passphrase: str, cfg: dict) -> bool:
@@ -59,18 +59,21 @@ def public_url(cfg: dict) -> str:
 
 
 class Lockout:
-    """Five wrong passphrases within 15 minutes pause every sign-in for 15 minutes."""
+    """Five wrong passphrases within 15 minutes from one address pause that address for 15 minutes, so someone
+    guessing from elsewhere can't lock the owner out. Fifty from anywhere pause every sign-in, which still caps
+    guessing from many addresses at once."""
 
     def __init__(self):
-        self.failures: list[float] = []
+        self.failures: list[tuple[float, str]] = []
 
-    def locked(self) -> bool:
+    def locked(self, ip: str = "") -> bool:
         cutoff = time.time() - FAIL_WINDOW
-        self.failures = [t for t in self.failures if t > cutoff]
-        return len(self.failures) >= FAIL_LIMIT
+        self.failures = [f for f in self.failures if f[0] > cutoff]
+        return (len(self.failures) >= FAIL_LIMIT_ALL
+                or sum(1 for _, who in self.failures if who == ip) >= FAIL_LIMIT)
 
-    def failed(self) -> None:
-        self.failures.append(time.time())
+    def failed(self, ip: str = "") -> None:
+        self.failures.append((time.time(), ip))
 
 
 class PassphraseOAuth:
@@ -117,7 +120,7 @@ class PassphraseOAuth:
 
     def app_name(self, client_id: str) -> str:
         client = self.clients.get(client_id)
-        return ((client.client_name if client else None) or "An AI app")[:80]
+        return app_label(client.client_name if client else "")
 
     async def get_client(self, client_id: str):
         return self.clients.get(client_id)
@@ -153,18 +156,18 @@ class PassphraseOAuth:
             return None
         return self.app_name(entry[1]), urlparse(str(entry[2].redirect_uri)).hostname or "?"
 
-    def complete_login(self, req: str, passphrase: str, vaults: list[str], change: bool) -> str | None:
+    def complete_login(self, req: str, passphrase: str, vaults: list[str], change: bool, ip: str = "") -> str | None:
         """The redirect back to the app on success, None on a wrong passphrase. vaults: the names ticked."""
         if not vaults:
             raise ValueError("Tick at least one vault.")
         with self.lock:
-            if self.lockout.locked():
+            if self.lockout.locked(ip):
                 raise PermissionError("Too many wrong tries. Wait 15 minutes.")
             entry = self.pending.get(req)
             if not entry or entry[0] < time.time():
                 raise LookupError("This login link expired. Start the connection again in your AI app.")
             if not self.check(passphrase):
-                self.lockout.failed()
+                self.lockout.failed(ip)
                 return None
             del self.pending[req]
             _, client_id, params = entry
@@ -246,6 +249,12 @@ class PassphraseOAuth:
                 self.clients.pop(client_id, None)
                 self.grants.pop(client_id, None)
             self.save()
+
+
+def app_label(name: str) -> str:
+    """An app's own name, as shown to the person; one that starts like "You" is marked, so no app can pose as them."""
+    name = " ".join((name or "").split())[:80] or "An AI app"
+    return f"An AI app called {name}"[:80] if name.casefold().startswith("you") else name
 
 
 def describe_agent(ua: str) -> str:

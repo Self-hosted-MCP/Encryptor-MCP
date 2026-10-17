@@ -220,6 +220,14 @@ def test_hosted_sign_in_and_lockout(hosted):
         assert client.post("/signin", data={"passphrase": "wrong-one!"}, headers=o).status_code == 401
     assert client.post("/signin", data={"passphrase": PASS}, headers=o).status_code == 429
     provider.lockout.failures.clear()
+    for i in range(5):   # wrong tries from somewhere else don't lock the owner out
+        provider.lockout.failed("8.8.8.8")
+    assert provider.lockout.locked("8.8.8.8") and not provider.lockout.locked("9.9.9.9")
+    provider.lockout.failures.clear()
+    for i in range(50):  # but many addresses together still pause everyone
+        provider.lockout.failed(f"8.8.4.{i}")
+    assert provider.lockout.locked("9.9.9.9")
+    provider.lockout.failures.clear()
     r = client.post("/signin", data={"passphrase": PASS}, headers=o, follow_redirects=False)
     assert r.status_code == 303
     assert "Your vaults" in client.get("/").text and "Connected AI apps" in client.get("/").text
@@ -488,3 +496,25 @@ def test_change_a_connected_apps_vaults(hosted, monkeypatch):
     assert "Saved" in r.text and provider.grants["c1"]["vaults"] == ["GCM", "Other"] and provider.grants["c1"]["change"]
     monkeypatch.setattr(server, "current_app", lambda: "c1")
     assert "Other" in server.vaults()
+
+
+def test_an_app_cant_pose_as_the_person(local):
+    """Only the sign-in page's own unlock signs in or skips the warning; an app's name decides nothing."""
+    from encryptor_mcp.auth import app_label
+    from encryptor_mcp.web import SIGNIN_APP
+    assert app_label("You, signing in") == "An AI app called You, signing in" and app_label("Claude") == "Claude"
+    client, lp, _ = local
+    m = server.manager()
+    code = m.request_unlock("GCM", SIGNIN_APP, "")          # an app that managed to use the exact name
+    page = client.get(f"/unlock/{code}").text
+    assert "Only continue if you asked your AI app" in page
+    r = client.post(f"/unlock/{code}", data={"password": PW, "keep": "1h"}, headers={"origin": lp.base},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/vault/") and "set-cookie" not in r.headers
+
+
+def test_client_address_behind_the_proxy():
+    ip = server.client_ip
+    assert ip("172.18.0.3", "6.6.6.6, 9.9.9.9") == "9.9.9.9"   # Caddy appends the real one last
+    assert ip("8.8.8.8", "9.9.9.9") == "8.8.8.8"               # straight from the internet: ignored
+    assert ip("127.0.0.1", "") == "127.0.0.1"

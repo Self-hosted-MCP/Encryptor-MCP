@@ -50,6 +50,8 @@ class Request:
     purpose: str
     created: float
     used: bool = False
+    signin: bool = False   # started on the sign-in page: unlocking also signs the person in
+    person: bool = False   # started by the person (sign-in page or control center), never by an app, whatever its name
 
 
 @dataclass
@@ -133,14 +135,15 @@ class UnlockManager:
 
     # ------------------------------------------------------------ the flow
 
-    def request_unlock(self, vault: str, app: str = "AI app", purpose: str = "", person: bool = False) -> str:
+    def request_unlock(self, vault: str, app: str = "AI app", purpose: str = "", person: bool = False,
+                       signin: bool = False) -> str:
         """A one-time code for the unlock page. Carries no secret; works once, for 5 minutes."""
         v = self.spec(vault, person)
         with self.lock_:
             now = self.clock()
             self.requests = {c: r for c, r in self.requests.items() if now - r.created < UNLOCK_LINK_TTL and not r.used}
             code = secrets.token_urlsafe(24)
-            self.requests[code] = Request(v.name, app[:80], purpose[:300], now)
+            self.requests[code] = Request(v.name, app[:80], purpose[:300], now, signin=signin, person=person or signin)
             self._event(v.name, f"unlock asked by {app[:80]}" + (f": {purpose[:300]}" if purpose else ""))
             return code
 

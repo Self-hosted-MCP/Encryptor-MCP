@@ -263,7 +263,7 @@ class Site:
             if kind is None:
                 return 200, {}, pages.message("Can't show this here", f"'{name}' can't be shown in the browser. Download it instead.")
             return 200, {**FILE_HEADERS, "Content-Type": kind}, data
-        ascii_name = name.encode("ascii", "replace").decode().replace('"', "_").replace("?", "_")
+        ascii_name = "".join(c if " " <= c <= "~" and c not in '"\\?' else "_" for c in name)   # no breaks or quotes
         return 200, {**FILE_HEADERS, "Content-Type": "application/octet-stream",
                      "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"}, data
 
@@ -300,7 +300,7 @@ class Site:
                     v = m.spec(unquote(parts[2]))   # never a hidden vault from here
                 except UnlockRefused as exc:
                     return 404, {}, pages.signin(False, str(exc), self.signin_vaults())
-                return 303, {"Location": f"/unlock/{m.request_unlock(v.name, SIGNIN_APP, '')}"}, ""
+                return 303, {"Location": f"/unlock/{m.request_unlock(v.name, SIGNIN_APP, '', signin=True)}"}, ""
             if len(parts) == 2 and method == "GET" and not c.hosted:
                 if c.sessions.use_link(parts[1]):
                     return c.sign_in(headers, how="one-time link")
@@ -310,10 +310,10 @@ class Site:
             if len(parts) == 1 and c.hosted:
                 if method == "GET":
                     return 200, {}, pages.signin(True)
-                if c.lockout.locked():
+                if c.lockout.locked(headers.get("x-client-ip", "")):
                     return 429, {}, pages.signin(True, "Too many wrong tries. Wait 15 minutes.")
                 if not c.check(form.get("passphrase", "")):
-                    c.lockout.failed()
+                    c.lockout.failed(headers.get("x-client-ip", ""))
                     c.sessions.record(False, "passphrase", headers.get("user-agent", ""), headers.get("x-client-ip", ""))
                     time.sleep(1)   # slows down guessing
                     return 401, {}, pages.signin(True, "Wrong passphrase.")
@@ -545,7 +545,7 @@ class Site:
 
     # ------------------------------------------------ AI-app login (a server only)
 
-    def app_login(self, method: str, form: dict, query: dict) -> tuple[int, dict, str]:
+    def app_login(self, method: str, form: dict, query: dict, headers: dict | None = None) -> tuple[int, dict, str]:
         prov = self.center.provider
         req = form.get("req") or query.get("req", "")
         info = prov.describe(req)
@@ -554,7 +554,8 @@ class Site:
             return (200 if info else 410), {}, pages.app_login(info, req, names)
         chosen = [n for n in form.get("vault_list", []) if n in names]
         try:
-            target = prov.complete_login(req, form.get("passphrase", ""), chosen, form.get("change") == "yes")
+            target = prov.complete_login(req, form.get("passphrase", ""), chosen, form.get("change") == "yes",
+                                         (headers or {}).get("x-client-ip", ""))
         except (PermissionError, LookupError, ValueError) as exc:
             return (400 if isinstance(exc, ValueError) else 403), {}, pages.app_login(info, req, names, str(exc))
         if target is None:
@@ -583,7 +584,7 @@ class Site:
         if len(parts) >= 2 and parts[0] == "vault":
             return self.vault_page(method, parts, form, headers)
         if parts[:1] == ["login"] and self.center and self.center.provider:
-            return self.app_login(method, form, query or {})
+            return self.app_login(method, form, query or {}, headers)
         if self.center is not None and (not parts or parts[0] in ("signin", "signout", "vaults", "settings", "apps", "devices", "activity", "about")):
             return self.center_page(method, parts, form, headers)
         return 404, {}, pages.message("Not found", "There's nothing here.")
@@ -602,15 +603,15 @@ class Site:
                                           "Ask your AI app to unlock the vault again.", center=self.center is not None)
         if method == "GET":
             return 200, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, idle_minutes=int(m.idle // 60),
-                                              center=self.center is not None)
+                                              center=self.center is not None, by_person=req.person)
         try:
             s = m.unlock(code, form.get("password", ""), form.get("keep", "lock"), form.get("read_only") == "yes")
         except UnlockRefused as exc:
             time.sleep(1)   # slows down guessing
             return 401, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, str(exc),
                                               idle_minutes=int(m.idle // 60),
-                                              center=self.center is not None)
-        if req.app == SIGNIN_APP and self.center is not None and not self.center.hosted:
+                                              center=self.center is not None, by_person=req.person)
+        if req.signin and self.center is not None and not self.center.hosted:
             return self.center.sign_in(headers or {}, how="vault password")   # in, with that vault open
         return 303, {"Location": f"/vault/{s.status_code}"}, ""
 

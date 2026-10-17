@@ -56,9 +56,12 @@ class Refused(VaultError):
     """A plain-words reason a change wasn't made."""
 
 
-def clean(path: str) -> str:
-    """A tidy absolute path, in NFC (names are stored NFC; macOS often sends decomposed names)."""
+def clean(path: str, new: bool = False) -> str:
+    """A tidy absolute path, in NFC (names are stored NFC; macOS often sends decomposed names). new: a name about
+    to be made, which may not hold control characters (an existing one can still be read, moved or trashed)."""
     parts = [unicodedata.normalize("NFC", p) for p in (path or "").strip("/").split("/") if p]
+    if new and any(ord(c) < 32 or ord(c) == 127 for p in parts for c in p):
+        raise Refused("Names can't contain control characters (line breaks, tabs and the like).")
     if parts and parts[0].casefold() == META:
         raise Refused(f"'{META}' holds Encryptor's own records; use changes, versions, undo and the trash tools.")
     return "/" + "/".join(parts)
@@ -169,7 +172,7 @@ class Journal:
     # ------------------------------------------------------------ changes
 
     def write(self, path: str, data: bytes, version: str, app: str, purpose: str) -> dict:
-        path = clean(path)
+        path = clean(path, new=True)
         with self._locked():
             self._brake()
             existing = self._exists(path)
@@ -190,7 +193,7 @@ class Journal:
             return self._record("write", path, app, purpose, id=cid, saved=saved, after=self.etag(existing))
 
     def append(self, path: str, data: bytes, app: str, purpose: str) -> dict:
-        path = clean(path)
+        path = clean(path, new=True)
         with self._locked():
             self._brake()
             existing = self._get(path)
@@ -204,7 +207,7 @@ class Journal:
             return self._record("append", path, app, purpose, id=cid, saved=saved, after=self.etag(existing))
 
     def mkdir(self, path: str, app: str, purpose: str) -> dict:
-        path = clean(path)
+        path = clean(path, new=True)
         with self._locked():
             self._brake()
             parent, name = parent_and_name(self.t, path)
@@ -212,7 +215,7 @@ class Journal:
             return self._record("mkdir", path, app, purpose)
 
     def move(self, path: str, to: str, app: str, purpose: str) -> dict:
-        path, to = clean(path), clean(to)
+        path, to = clean(path), clean(to, new=True)
         with self._locked():
             self._brake()
             entry = self._get(path)
@@ -223,7 +226,7 @@ class Journal:
     def move_over(self, path: str, to: str, app: str, purpose: str) -> dict:
         """Move a file onto an existing file (how many apps save: write a temporary file, then rename it over the
         original). The original's contents are kept as a version, so this is an undoable replace."""
-        path, to = clean(path), clean(to)
+        path, to = clean(path), clean(to, new=True)
         with self._locked():
             self._brake()
             src, dst = self._get(path), self._get(to)
@@ -237,7 +240,7 @@ class Journal:
             return self._record("write", to, app, purpose, id=cid, saved=saved, source=path, after=self.etag(e))
 
     def copy(self, path: str, to: str, app: str, purpose: str) -> dict:
-        path, to = clean(path), clean(to)
+        path, to = clean(path), clean(to, new=True)
         with self._locked():
             self._brake()
             parent, name = parent_and_name(self.t, to)
@@ -376,11 +379,13 @@ class Journal:
         there = {e.name for e in self.t.list_dir(trash.dir_id)}
         return [r for r in self.records(1000) if r.get("trash") in there]
 
-    def empty_trash(self, item: str, app: str, purpose: str) -> dict:
-        """Delete for good: one trash item (its change id), or everything when item is empty. Not undoable."""
+    def empty_trash(self, item: str, app: str, purpose: str, only: set[str] | None = None) -> dict:
+        """Delete for good: one trash item (its change id), or everything when item is empty. Not undoable.
+        only: the items the person approved; anything put in the trash since then stays."""
         with self._locked():
             trash = self._meta("trash")
-            targets = [e for e in self.t.list_dir(trash.dir_id) if not item or e.name == item]
+            targets = [e for e in self.t.list_dir(trash.dir_id) if (not item or e.name == item)
+                       and (only is None or e.name in only)]
             if item and not targets:
                 raise Refused(f"No {item!r} in the trash.")
             for e in targets:

@@ -33,7 +33,6 @@ from .vault.keys import VaultError
 from .vault.tree import Entry
 
 DEBUG = bool(__import__("os").environ.get("ENCRYPTOR_DAV_DEBUG"))
-SAME_USER_CACHE = 300   # seconds a checked connection stays trusted
 MAX_PUT = 512 * 1024 * 1024        # files saved from Finder are held in memory (never on disk), so there's a cap
 CACHE_SECONDS = 2.0
 JUNK_NAMES = {".DS_Store", ".Spotlight-V100", ".Trashes", ".fseventsd", ".TemporaryItems", ".hidden", ".apdisk",
@@ -396,14 +395,6 @@ def same_user(local_port: int, client_port: int, run=subprocess.run) -> bool:
             print("DAV same-user check failed", attempt, file=sys.stderr, flush=True)
         time.sleep(0.3)
     return False
-    pid = None
-    for line in out.splitlines():
-        if line.startswith("p"):
-            pid = int(line[1:])
-        elif line.startswith("n") and pid is not None and pid != os.getpid():
-            if line[1:].startswith(f"127.0.0.1:{client_port}->127.0.0.1:{local_port}"):
-                return True
-    return False
 
 
 def serve(session, journal, manager, on_read=None) -> Mount:
@@ -445,7 +436,12 @@ def serve(session, journal, manager, on_read=None) -> Mount:
     app = App(config)
     silence()   # again: the library sets up its loggers while starting
     allowed: set[str] = set()
-    trusted: dict[int, float] = {}
+
+    class Gateway(wsgi.Gateway_10):   # hands each request its connection, so trust stays with that one socket
+        def get_environ(self):
+            env = super().get_environ()
+            env["encryptor.conn"] = self.req.conn
+            return env
 
     def guarded(environ, start_response):
         if DEBUG:
@@ -458,17 +454,20 @@ def serve(session, journal, manager, on_read=None) -> Mount:
         if not (path == f"/{secret}" or path.startswith(f"/{secret}/")):
             start_response("404 Not Found", [("Content-Type", "text/plain")])
             return [b"Not found."]
-        client = int(environ.get("REMOTE_PORT") or 0)
-        if time.monotonic() - trusted.get(client, -1e9) > SAME_USER_CACHE:
-            if not same_user(port, client):
+        # Checked once per connection (not per port: a port is reused by the next connection, which may be anyone's).
+        conn = environ.get("encryptor.conn")
+        if conn is None or not getattr(conn, "encryptor_same_user", False):
+            client = int(environ.get("REMOTE_PORT") or 0)
+            if conn is None or not same_user(port, client):
                 if DEBUG:
                     print("DAV refused: not the same user", client, file=sys.stderr, flush=True)
                 start_response("403 Forbidden", [("Content-Type", "text/plain")])
                 return [b"Only programs of the Mac user who opened the vault can use it."]
-            trusted[client] = time.monotonic()
+            conn.encryptor_same_user = True
         return app(environ, start_response)
 
     server = wsgi.Server(("127.0.0.1", 0), guarded, numthreads=8, server_name="Encryptor")
+    server.gateway = Gateway
     server.prepare()
     port = server.bind_addr[1]
     allowed.update({f"127.0.0.1:{port}", f"localhost:{port}"})

@@ -15,11 +15,12 @@ from test_mcp import post_password, text
 from test_vault import ours
 
 
-def run(tmp_path, steps, approve="ask", answer=True, modes=""):
+def run(tmp_path, steps, approve="ask", answer=True, modes="", ask_before=""):
     vault = tmp_path / "v"
     shutil.copytree(FIXTURES / "vault-SIV_GCM", vault)
     env = {**os.environ, "ENCRYPTOR_CONFIG_DIR": str(tmp_path / "cfg"), "ENCRYPTOR_UNLOCK": "page",
-           "ENCRYPTOR_APPROVE": approve, "ENCRYPTOR_VAULTS": f"V={vault}", "ENCRYPTOR_MODES": modes}
+           "ENCRYPTOR_APPROVE": approve, "ENCRYPTOR_VAULTS": f"V={vault}", "ENCRYPTOR_MODES": modes,
+           "ENCRYPTOR_ASK_BEFORE": ask_before}
     asked = []
 
     async def elicit(ctx, params):
@@ -90,19 +91,29 @@ def test_saying_no_keeps_everything(tmp_path):
 
 def test_code_fallback_needs_the_same_action(tmp_path):
     async def steps(call, s):
-        await call("trash", vault="V", path="big.bin", purpose="t")
-        first = text(await call("empty_trash", vault="V", purpose="t"))
+        first = text(await call("trash", vault="V", path="big.bin", purpose="t"))
         code = re.search(r'confirm="(\w+)"', first).group(1)
-        item = text(await call("trash_list", vault="V")).split()[0]
-        other = text(await call("empty_trash", vault="V", purpose="t", item=item, confirm=code))
-        first2 = text(await call("empty_trash", vault="V", purpose="t"))
+        other = text(await call("trash", vault="V", path="small.txt", purpose="t", confirm=code))
+        first2 = text(await call("trash", vault="V", path="big.bin", purpose="t"))
         code2 = re.search(r'confirm="(\w+)"', first2).group(1)
-        done = text(await call("empty_trash", vault="V", purpose="t", confirm=code2))
-        again = text(await call("empty_trash", vault="V", purpose="t", confirm=code2))
+        done = text(await call("trash", vault="V", path="big.bin", purpose="t", confirm=code2))
+        again = text(await call("trash", vault="V", path="big.bin", purpose="t", confirm=code2))
         return first, other, done, again
-    (first, other, done, again), asked, _ = run(tmp_path, steps, approve="code")
+    (first, other, done, again), asked, _ = run(tmp_path, steps, approve="code", ask_before="trash")
     assert "Only if they clearly say yes" in first and not asked
-    assert "doesn't match" in other and done.startswith("Deleted 1") and again == "The trash is empty."
+    assert "doesn't match" in other and done.startswith("Put /big.bin in the trash") and "doesn't match" in again
+
+
+def test_deleting_for_good_is_never_approved_in_the_chat(tmp_path):
+    """The AI would hold a chat code itself, so emptying the trash needs the box, the app's question or the page."""
+    async def steps(call, s):
+        await call("trash", vault="V", path="big.bin", purpose="t")
+        tools = {t.name: t for t in (await s.list_tools()).tools}
+        return (text(await call("empty_trash", vault="V", purpose="t")), text(await call("trash_list", vault="V")),
+                tools["empty_trash"].input_schema["properties"])
+    (said, left, props), asked, _ = run(tmp_path, steps, approve="code")
+    assert "control center" in said and "confirm=" not in said and "/big.bin" in left and not asked
+    assert "confirm" not in props
 
 
 def test_read_only_setup_has_no_write_tools(tmp_path):

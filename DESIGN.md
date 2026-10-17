@@ -278,7 +278,7 @@ Small, nearly square corners: 4px on cards, buttons, the segmented control and m
 - **Segmented choice (keep open):** four equal cells in a 1.5px ink frame; the chosen cell fills with ink; focus shows a violet inset outline.
 
 ### Navigation
-- **Style:** a slim top row: brand (violet tag icon plus "Encryptor MCP" in 650) at left, text links in 13px soft ink at right with 18px gaps.
+- **Style:** a slim top row: brand (the app robot at 46px, without its tile, in the stamp violet with a white visor, dark eyes and a yellow padlock, plus "Encryptor MCP" in 650) at left, text links in 13px soft ink at right with 18px gaps.
 - **States:** hover and current page turn ink with an underline (3px offset). Sign out and the light/dark switch are form buttons styled as the same link; the switch, last in the nav on every page, carries a 16px moon or sun stroke icon before its word.
 
 ### Messages

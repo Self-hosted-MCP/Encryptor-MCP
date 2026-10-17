@@ -131,3 +131,11 @@ def test_brake_on_too_many_changes(j):
     j.recent = [j.clock()] * 60
     with pytest.raises(Refused, match="slowing down"):
         j.mkdir("/x", *A)
+
+
+def test_new_names_without_control_characters(tmp_path):
+    from encryptor_mcp.changes import Refused, clean
+    for bad in ("/a\nb.txt", "/x/\r", "/tab\there", "/del\x7f"):
+        with pytest.raises(Refused):
+            clean(bad, new=True)
+        assert clean(bad) == "/" + bad.strip("/")   # an existing odd name can still be found

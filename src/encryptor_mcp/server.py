@@ -50,7 +50,7 @@ from mcp_types import ToolAnnotations
 
 from pydantic import BaseModel, Field
 
-from . import ask, changes, pages as page_html, web
+from . import ask, auth, changes, pages as page_html, web
 from .store import private_write, read_json
 from .unlock import Locked, UnlockManager, UnlockRefused, VaultSpec
 from .vault import keys, tree
@@ -395,9 +395,9 @@ def pages():
 def app_name(ctx: Context | None) -> str:
     try:
         info = ctx.request_context.session.client_params.client_info
-        return (info.title or info.name or "AI app")[:80]
+        return auth.app_label(info.title or info.name or "AI app")
     except Exception:
-        return os.environ.get("ENCRYPTOR_APP_NAME") or "AI app"
+        return auth.app_label(os.environ.get("ENCRYPTOR_APP_NAME") or "AI app")
 
 
 def client_supports_url_mode(ctx: Context) -> bool:
@@ -469,6 +469,19 @@ INSTRUCTIONS = (
 DEFAULT_REDIRECT_HOSTS = "claude.ai,claude.com,chatgpt.com,openai.com,vscode.dev"
 
 
+def client_ip(peer: str, forwarded: str) -> str:
+    """Who is asking. Behind the proxy (Caddy, on this machine or its private network) the real address is the last
+    one in X-Forwarded-For, the one the proxy added itself; earlier ones are whatever the sender wrote. Straight from
+    the internet, the header is ignored."""
+    import ipaddress
+    try:
+        behind_proxy = ipaddress.ip_address(peer).is_private
+    except ValueError:
+        behind_proxy = False
+    last = forwarded.split(",")[-1].strip() if forwarded else ""
+    return (last if behind_proxy and last else peer)[:64]
+
+
 def build_server(remote: bool) -> MCPServer:
     """remote: the web version, with the passphrase login for AI apps and the control center at its address."""
     if not remote:
@@ -525,8 +538,8 @@ def add_page_routes(server: MCPServer, site) -> None:
             form = {k: v[0] for k, v in parsed.items()}
             form["vault_list"] = parsed.get("vault", [])
         headers = {k.lower(): v for k, v in request.headers.items() if k.lower() != "x-client-ip"}
-        forwarded = (headers.get("x-forwarded-for") or "").split(",")[0].strip()
-        headers["x-client-ip"] = forwarded or (request.client.host if request.client else "")
+        headers["x-client-ip"] = client_ip(request.client.host if request.client else "",
+                                           headers.get("x-forwarded-for", ""))
         status, extra, body = await asyncio.to_thread(site.handle, request.method, request.url.path, form, headers,
                                                       dict(request.query_params))
         return Response(body, status_code=status,
@@ -897,11 +910,13 @@ def client_supports_form(ctx: Context) -> bool:
         return False
 
 
-async def approve(ctx: Context, fingerprint: str, question: str, purpose: str, button: str, confirm: str) -> str | None:
+async def approve(ctx: Context, fingerprint: str, question: str, purpose: str, button: str, confirm: str,
+                  chat_ok: bool = True) -> str | None:
     """None when the person approved. Otherwise the answer for the AI: they said no, or how to ask them.
     The person approves outside the chat when possible: a native box, else the app's own question. A one-time
-    code that the AI passes back after asking in the chat is the last resort."""
-    if confirm:
+    code that the AI passes back after asking in the chat is the last resort, and only for changes that can be
+    undone (chat_ok): the AI holds that code, so it can't be the only guard for something final."""
+    if confirm and chat_ok:
         held = _codes.pop(confirm, None)
         if held and held[0] == fingerprint and time.time() - held[1] < APPROVAL_TTL:
             return None
@@ -922,6 +937,9 @@ async def approve(ctx: Context, fingerprint: str, question: str, purpose: str, b
             return "The user didn't allow it. Nothing was changed."
         except Exception:
             pass
+    if not chat_ok:
+        return ("This can't be approved in the chat. The user can do it on the vault's page in the control center "
+                "(call control_center). Nothing was changed.")
     code = secrets.token_hex(4)
     _codes[code] = (fingerprint, time.time())
     return (f"This needs the user's OK. Ask them in the chat, in their own language: \"{question}\" "
@@ -1020,9 +1038,9 @@ def trash_list(vault: str) -> str:
 
 
 @change_tool(destructive=True)
-async def empty_trash(vault: str, purpose: str, ctx: Context, item: str = "", confirm: str = "") -> str:
+async def empty_trash(vault: str, purpose: str, ctx: Context, item: str = "") -> str:
     """Delete for good: one item from the trash (its id from trash_list), or the whole trash when item is empty.
-    This can't be undone, so the user approves it themselves outside the chat. confirm: only when asked for."""
+    This can't be undone, so the user approves it themselves outside the chat."""
     s = writable(vault)
     if not allow_purge():
         raise ToolError("Deleting for good is switched off for AI apps. The user can empty the trash on the control "
@@ -1032,11 +1050,12 @@ async def empty_trash(vault: str, purpose: str, ctx: Context, item: str = "", co
     if not items:
         return "The trash is empty." if not item else f"No {item!r} in the trash."
     what = (f"'{items[0]['path']}'" if len(items) == 1 else f"{len(items)} items") + f" from the trash of {s.vault.name}"
-    no = await approve(ctx, _fp("empty_trash", s.vault.name, item), f"Delete {what} for good? This can't be undone.",
-                       purpose, "Delete for good", confirm)
+    no = await approve(ctx, _fp("empty_trash", s.vault.name, item, *sorted(r["trash"] for r in items)),
+                       f"Delete {what} for good? This can't be undone.", purpose, "Delete for good", "",
+                       chat_ok=False)
     if no:
         return no
-    rec = _change(s, j.empty_trash, item, app_name(ctx), purpose)
+    rec = _change(s, j.empty_trash, item, app_name(ctx), purpose, {r["trash"] for r in items})
     return f"Deleted {len(rec['removed'])} item(s) for good."
 
 

@@ -25,7 +25,8 @@ What Encryptor MCP protects against, and what it can't. Written plainly so you c
 - **Changing the password doesn't change the vault's master key** (as in Cryptomator). If the master key itself may have leaked, make a new vault and move the files.
 - **Deleting both read log files at once** starts a new, empty log; that can't be noticed from the files alone.
 - **The Finder mount and the macOS Spotlight or thumbnail caches:** Spotlight indexing is turned off for the mount, but files you open may be cached by macOS like any opened file.
-- **A malicious program running as you** on the same computer can do what you can. On a computer, the Finder mount accepts only macOS's own mount agent of your user; the unlock and control center pages are local only.
+- **A malicious program running as you** on the same computer can do what you can. On a computer, the Finder mount accepts only macOS's own mount agent of your user; the unlock and control center pages are local only. Browsers send a 127.0.0.1 sign-in cookie to every port on 127.0.0.1, so another web page served on your computer could see it if you open that page; that needs a program already running as you, which could read Encryptor's own files anyway. The cookie lasts at most 12 hours and ends when you sign out or close the browser.
+- **Rolling back the read log** to an older copy of both its files at once isn't noticed (same as deleting both).
 
 ## Not audited yet
 
