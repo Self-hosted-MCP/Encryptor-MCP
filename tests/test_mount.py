@@ -40,6 +40,8 @@ def req(url, method="GET", data=None, headers=None, host=None):
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
+    except ConnectionError:   # Windows: the server refused and closed before the body was sent
+        return 0, b""
 
 
 def test_reads_like_the_vault(dav):
@@ -96,8 +98,10 @@ def test_read_only_and_locked(dav, tmp_path):
     s.read_only = True
     ro = mount.serve(s, j, m)
     try:
-        assert req(ro.url + "x.txt", "PUT", b"x")[0] in (403, 405)
-        assert req(ro.url + "hello.txt", "DELETE")[0] in (403, 405)
+        assert req(ro.url + "x.txt", "PUT", b"x")[0] in (0, 403, 405)
+        assert req(ro.url + "hello.txt", "DELETE")[0] in (0, 403, 405)
+        t = open_tree(v, "SIV_GCM")
+        assert t.resolve("/hello.txt") and "x.txt" not in [e.name for e in t.list_dir(b"")]
         assert req(ro.url + "hello.txt")[0] == 200
     finally:
         ro.server.stop()
