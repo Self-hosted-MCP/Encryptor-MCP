@@ -22,7 +22,7 @@ Every tool that works on files needs the vault to be open. Paths look like `Taxe
 | `locate` | Tells where a file or folder is stored encrypted, inside the vault folder. Handy for sync conflicts and backups | `vault`, `path` | reads |
 | `decrypt_name` | Tells which real file an encrypted name is, like `d/AB/CDEF.../name.c9r` from a sync app | `vault`, `encrypted_path` | reads |
 | `write_file` | Makes a new text file, or replaces one. To replace, it needs the version it got when reading, so it never writes over newer work | `vault`, `path`, `content`, `purpose`, `version`, `confirm` | changes, can be undone |
-| `append_file` | Adds text to the end of a text file | `vault`, `path`, `content`, `purpose` | changes, can be undone |
+| `append_file` | Adds text to the end of a text file, exactly as given (start it with a line break for a new line) | `vault`, `path`, `content`, `purpose` | changes, can be undone |
 | `make_folder` | Makes a folder (the folder it goes in must exist) | `vault`, `path`, `purpose` | changes, can be undone |
 | `move` | Moves or renames a file or folder, inside one vault. Never overwrites: the new place must be free | `vault`, `path`, `to`, `purpose`, `confirm` | changes, can be undone |
 | `copy_file` | Copies a file to a new name or folder in the same vault. It stays encrypted the whole time | `vault`, `path`, `to`, `purpose` | changes, can be undone |

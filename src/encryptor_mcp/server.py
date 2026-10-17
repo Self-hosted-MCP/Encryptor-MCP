@@ -1038,7 +1038,8 @@ async def write_file(vault: str, path: str, content: str, purpose: str, ctx: Con
 
 @change_tool()
 def append_file(vault: str, path: str, content: str, purpose: str, ctx: Context) -> str:
-    """Add text to the end of an existing text file. The previous contents are kept and it can be undone."""
+    """Add text to the end of an existing text file, exactly as given: to add it on a new line, start the text with
+    a line break. The previous contents are kept and it can be undone."""
     s = writable(vault)
     if len(content) > MAX_WRITE_CHARS:
         raise ToolError(f"Too long: at most {MAX_WRITE_CHARS} characters at a time.")
