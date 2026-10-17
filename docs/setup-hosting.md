@@ -81,6 +81,6 @@ See [updates.md](updates.md).
 
 | Step | Tested |
 |---|---|
-| The image's settings (`serve` on port 8767, `/health`, `/data`), run directly | Yes (macOS) |
+| The published image (`ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:0.1.1`) on a disk owned by root, like Railway's and Render's: it gives `/data` to the `encryptor` user, runs as that user, `/health` says `ok` | Yes, in Docker on a Mac (2026-10-17) |
+| A vault created in `/data/vaults` survives a restart | Yes |
 | Railway and Render, end to end | Not yet |
-| The start script giving a root-owned `/data` to the `encryptor` user | Not yet inside a real hosting company |

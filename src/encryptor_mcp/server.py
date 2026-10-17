@@ -1202,7 +1202,7 @@ def check() -> None:
     if read_only_all(cfg):
         print("Read only for every AI app: on.")
     if cfg.get("LOGIN_HASH") or cfg.get("LOGIN_PASSPHRASE"):
-        public = public_url(cfg)
+        public = auth.public_url(cfg)
         print(f"Server version: passphrase set; address {public}" + ("" if public.startswith("https://") or
               public.startswith(("http://localhost", "http://127.0.0.1")) else " (must start with https://)"))
     if problems:

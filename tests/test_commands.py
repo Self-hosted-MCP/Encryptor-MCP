@@ -26,6 +26,15 @@ def test_check_reports_each_vault_without_opening_it(tmp_path):
     assert r.returncode == 0 and "No vault was opened" in r.stdout
 
 
+def test_check_on_a_server(tmp_path):
+    r = run(tmp_path, "check", LOGIN_PASSPHRASE="a-test-passphrase", PUBLIC_URL="https://vault.example.com",
+            ENCRYPTOR_VAULTS=f"GCM={FIXTURES / 'vault-SIV_GCM'}")
+    assert r.returncode == 0, r.stderr
+    assert "Server version: passphrase set; address https://vault.example.com" in r.stdout
+    r = run(tmp_path, "check", LOGIN_PASSPHRASE="a-test-passphrase", PUBLIC_URL="http://vault.example.com")
+    assert "(must start with https://)" in r.stdout
+
+
 def test_setup_adds_vaults_and_refuses_wrong_folders(tmp_path):
     answers = f"Mine\n{FIXTURES / 'vault-SIV_CTRMAC'}\nn\nBad\n{tmp_path}\n\n\n"
     r = run(tmp_path, "setup", stdin=answers)

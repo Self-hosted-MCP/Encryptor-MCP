@@ -114,6 +114,14 @@ docker compose logs -f encryptor
 
 You should see a line like `Control center: https://vault.example.com/  ·  AI apps connect to: https://vault.example.com/mcp`.
 
+To check your settings and vault folders without opening any vault:
+
+```bash
+docker compose run --rm encryptor encryptor-mcp check
+```
+
+Run Encryptor's commands with `docker compose run --rm encryptor ...` as above. `docker compose exec` runs them as the system's admin user (root), which can leave files the server can't read; if you use `exec`, add `-u encryptor`.
+
 ### 7. Add your vaults
 
 Open `https://vault.example.com`, type your passphrase and press **Sign in**. Go to **Settings**. Under **Add a vault**, type a **Name** and the **Vault folder** as the container sees it (`/vaults/Taxes`), choose what **The AI may** do, and press **Add vault**. No vault yet? Use **Create a new vault**.
@@ -273,8 +281,10 @@ Your vaults are not touched. The `.encryptor` folder stays inside each vault: de
 
 | Step | Tested |
 |---|---|
-| `encryptor-mcp serve` with the Docker image's settings, run directly (not inside Docker) | Yes (macOS) |
+| Docker Compose end to end on a Mac (Colima): build, Caddy with HTTPS, `/health`, sign in, add a vault from `./vaults`, an AI app connecting over OAuth, unlock, read, write, undo, lock, then a clean health check of the vault | Yes (2026-10-17) |
+| `encryptor-mcp check` inside the container | Yes |
 | The control center in a browser, desktop and phone width, light and dark | Yes (macOS) |
-| Docker Compose end to end (build, Caddy, a real domain), `set-passphrase` inside the container | Not yet |
+| A real domain with a public certificate (the test used `localhost`, where Caddy makes its own) | Not yet |
+| `set-passphrase` inside the container (it asks for the passphrase on screen) | Not yet |
 | The rclone service, the folder owner steps, nginx, systemd | Not yet: steps follow the official docs of each |
 | Each AI app over the internet | Not yet |
