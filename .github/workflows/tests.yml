@@ -1,12 +1,13 @@
 # Runs every test on macOS, Windows and Linux, with the oldest and newest supported Python, for every push and
-# pull request. The compatibility checks run Cryptomator's own libraries (fetched from Maven Central by
-# tests/java/fetch_jars.py, each file checked against a pinned SHA-256), so vaults written here must open in
-# Cryptomator on every system.
+# pull request. The compatibility tests use the reference libraries (fetched from Maven Central by
+# tests/java/fetch_jars.py, each file checked against a pinned SHA-256), so vaults written here open in
+# Cryptomator on every system. Free on a public repository.
 name: Tests
 
-# Started by hand only (Actions tab > Tests > Run workflow), e.g. before a release: while the repository is private,
-# every run is billed, and macOS minutes count ten times. The tests run locally on every change anyway.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:

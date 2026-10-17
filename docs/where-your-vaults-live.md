@@ -68,7 +68,7 @@ It runs with `--vfs-cache-mode writes`: rclone keeps files being saved in its ca
 - **Cryptomator Hub vaults,** and vaults whose key file is kept outside the vault folder.
 - **Older vaults** (format 6 and 7, from Cryptomator before 1.6). A current Cryptomator can upgrade them.
 - **Storage you can only reach in a browser,** with no sync app and no rclone support. Encryptor needs a folder.
-- **Vault folders at a hosting company** (Railway, Render and the like). The keys would sit in that company's memory, and your vault folders would have to be on its disk. See [roadmap.md](roadmap.md).
+- **Your cloud vaults on a hosting company** (Railway, Render and the like). There, vaults live on the hosting company's disk, at `/data/vaults`, and don't sync with your devices. See [setup-hosting.md](setup-hosting.md).
 
 ## After a sync conflict
 

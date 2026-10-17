@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import hmac
 import mimetypes
+import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -25,7 +27,8 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import changes, pages
+from . import changes, i18n, pages
+from .i18n import _
 from .vault import keys
 from .auth import Lockout, Sessions
 from .unlock import UnlockManager, UnlockRefused
@@ -129,7 +132,7 @@ class Site:
             in_trash = {r["trash"] for r in j.trash_items()}
             for r in j.records(15):
                 view["changes"].append({
-                    "id": r["id"], "when": time.strftime("%d %b %H:%M", time.localtime(r["time"])),
+                    "id": r["id"], "when": pages._when(r["time"]),
                     "action": r["action"], "path": r["path"], "to": r.get("to", ""), "app": r["app"],
                     "purpose": r.get("purpose", ""), "undone": bool(r.get("undone_by")),
                     "undoable": not s.read_only and not r.get("undone_by")
@@ -143,31 +146,31 @@ class Site:
                     view["reads"] = {"entries": [], "verdict": "The read log can't be opened."}
             for r in j.trash_items():
                 view["trash"].append({"id": r["trash"], "change": r["id"], "path": r["path"], "kind": r.get("kind", "file"),
-                                      "when": time.strftime("%d %b %H:%M", time.localtime(r["time"])), "app": r["app"]})
+                                      "when": pages._when(r["time"]), "app": r["app"]})
         return view
 
     def vault_page(self, method: str, parts: list[str], form: dict, headers: dict | None = None):
         m, mounts = self.manager, self.mounts
         s = m.by_status_code(parts[1])
         if s is None:
-            return 404, {}, pages.message("Locked", "This vault is locked.", ok=True, center=self.center is not None)
+            return 404, {}, pages.message(_("Locked"), _("This vault is locked."), ok=True, center=self.center is not None)
         action = parts[2] if len(parts) > 2 else ""
         rel = "/".join(unquote(p) for p in parts[3:])
         if method == "POST" and action == "lock" and len(parts) == 3:
             if mounts:
                 mounts.unmount(s.vault.name)
             m.lock(s.vault.name, "locked on its page")
-            return 200, {}, pages.message("Locked", f"{s.vault.name} is locked. The keys are gone from memory.",
+            return 200, {}, pages.message(_("Locked"), _("{vault} is locked. The keys are gone from memory.", vault=s.vault.name),
                                           ok=True, center=self.center is not None)
         if method == "POST" and action in ("mount", "unmount") and len(parts) == 3 and mounts:
             m.use(s.vault.name, person=True)
             try:
                 if action == "mount":
-                    note = f"Open in {mounts.label()}, under Locations."
+                    note = _("Open in {app}, under Locations.", app=mounts.label())
                     mounts.mount(s)
                 else:
                     mounts.unmount(s.vault.name)
-                    note = f"Removed from {mounts.label()}."
+                    note = _("Removed from {app}.", app=mounts.label())
             except Exception as exc:   # a plain-words reason from mount.py
                 note = str(exc)
             return 200, {}, pages.vault_page(self.vault_view(s, note))
@@ -178,49 +181,49 @@ class Site:
                 return self.center.health(s) if self.center.health else (health.check(s.tree), "")
             if action == "repair":
                 if s.read_only:
-                    return 403, {}, pages.vault_page(self.vault_view(s, "This vault is open read only."))
+                    return 403, {}, pages.vault_page(self.vault_view(s, _("This vault is open read only.")))
                 found = [f for f in run_check()[0] if f.fix]
                 if form.get("confirm") != "yes":
                     return 200, {}, pages.confirm_change({
                         "csrf": "", "action": f"/vault/{s.status_code}/repair", "back": f"/vault/{s.status_code}",
-                        "title": f"Repair {s.vault.name}?", "button": f"Yes, repair {len(found)}",
+                        "title": _("Repair {vault}?", vault=s.vault.name), "button": _("Yes, repair {n}", n=len(found)),
                         "fields": {}, "facts": [(f.kind, f.where) for f in found[:8]],
-                        "lines": [f.fix for f in found[:8]] + ["Only safe repairs are made; nothing is deleted "
-                                                               "except leftover temporary files."]})
+                        "lines": [f.fix for f in found[:8]] + [_("Only safe repairs are made; nothing is deleted "
+                                                                 "except leftover temporary files.")]})
                 done = []
                 for f in found:
                     try:
                         if f.kind == "ChangedElsewhere" and self.center.fingerprints:
                             n = self.center.fingerprints(s).record_all()
-                            done.append(f"Remembered the vault as it is now ({n} files).")
+                            done.append(_("Remembered the vault as it is now ({n} files).", n=n))
                             continue
                         done.append(health.repair(s.tree, f))
                     except Exception as exc:
-                        done.append(f"Not repaired ({f.where}): {exc}")
+                        done.append(_("Not repaired ({where}): {reason}", where=f.where, reason=exc))
                 m._event(s.vault.name, f"repaired {len(found)} problem(s) on the control center")
                 s.health = (time.time(), run_check()[0])
-                return 200, {}, pages.vault_page(self.vault_view(s, " ".join(done) or "Nothing to repair."))
+                return 200, {}, pages.vault_page(self.vault_view(s, " ".join(done) or _("Nothing to repair.")))
             found, note = run_check()
             s.health = (time.time(), found)
             n = len(found)
             return 200, {}, pages.vault_page(self.vault_view(
-                s, ("Healthy: nothing wrong found." if not n else f"Found {n} thing(s) to look at, below.")
+                s, (_("Healthy: nothing wrong found.") if not n else _("Found {n} thing(s) to look at, below.", n=n))
                 + (f" {note}" if note else "")))
         if method == "POST" and action in ("undo", "purge") and len(parts) == 3 and self.center is not None:
             m.use(s.vault.name, person=True)
             if s.read_only:
-                return 403, {}, pages.vault_page(self.vault_view(s, "This vault is open read only."))
+                return 403, {}, pages.vault_page(self.vault_view(s, _("This vault is open read only.")))
             j = self.center.journal_for(s)
             try:
                 if action == "undo":
                     rec = j.undo(form.get("change", ""), "You (control center)", "")
-                    note = f"Undone: {rec['did']}."
+                    note = _("Undone: {what}.", what=rec['did'])
                 else:
                     if form.get("confirm") != "yes":
                         return 400, {}, pages.vault_page(self.vault_view(
-                            s, "Tick the box to confirm. Deleting for good can't be undone."))
+                            s, _("Tick the box to confirm. Deleting for good can't be undone.")))
                     rec = j.empty_trash(form.get("item", ""), "You (control center)", "")
-                    note = f"Deleted {len(rec['removed'])} item(s) for good."
+                    note = _("Deleted {n} item(s) for good.", n=len(rec['removed']))
                 m._event(s.vault.name, f"{action} on the control center")
             except keys.VaultError as exc:
                 note = str(exc)
@@ -230,15 +233,15 @@ class Site:
         if method == "GET" and not action and len(parts) == 2:
             return 200, {}, pages.vault_page(self.vault_view(s))
         if method != "GET" or action not in ("files", "open", "get"):
-            return 404, {}, pages.message("Not found", "There's nothing here.")
+            return 404, {}, pages.message(_("Not found"), _("There's nothing here."))
         m.use(s.vault.name, person=True)   # looking counts as using the vault
         try:
             e = s.tree.resolve(changes.clean(rel))
         except keys.VaultError as exc:
-            return 404, {}, pages.message("Not found", str(exc))
+            return 404, {}, pages.message(_("Not found"), str(exc))
         if action == "files":
             if e.kind != "dir":
-                return 404, {}, pages.message("Not a folder", f"'{rel}' isn't a folder.")
+                return 404, {}, pages.message(_("Not a folder"), _("'{path}' isn't a folder.", path=rel))
             rows = []
             for item in s.tree.list_dir(e.dir_id):
                 if e.dir_id == b"" and item.name.casefold() == changes.META:
@@ -252,7 +255,7 @@ class Site:
                     rows.append((item.name, item.kind, "", date, False))
             return 200, {}, pages.browse(s.vault.name, s.status_code, rel, rows)
         if e.kind != "file":
-            return 404, {}, pages.message("Not a file", f"'{rel}' isn't a file.")
+            return 404, {}, pages.message(_("Not a file"), _("'{path}' isn't a file.", path=rel))
         data = s.tree.read_file(e)
         m._event(s.vault.name, f"{'viewed' if action == 'open' else 'downloaded'} {rel} on the browse page")
         if self.center and self.center.log_read:
@@ -261,7 +264,8 @@ class Site:
         if action == "open":
             kind = _kind(name, data)
             if kind is None:
-                return 200, {}, pages.message("Can't show this here", f"'{name}' can't be shown in the browser. Download it instead.")
+                return 200, {}, pages.message(_("Can't show this here"),
+                                                 _("'{name}' can't be shown in the browser. Download it instead.", name=name))
             return 200, {**FILE_HEADERS, "Content-Type": kind}, data
         ascii_name = "".join(c if " " <= c <= "~" and c not in '"\\?' else "_" for c in name)   # no breaks or quotes
         return 200, {**FILE_HEADERS, "Content-Type": "application/octet-stream",
@@ -305,25 +309,25 @@ class Site:
                 if c.sessions.use_link(parts[1]):
                     return c.sign_in(headers, how="one-time link")
                 c.sessions.record(False, "expired link", headers.get("user-agent", ""), headers.get("x-client-ip", ""))
-                return 410, {}, pages.signin(False, "This sign-in link expired or was already used.",
+                return 410, {}, pages.signin(False, _("This sign-in link expired or was already used."),
                                              self.signin_vaults())
             if len(parts) == 1 and c.hosted:
                 if method == "GET":
                     return 200, {}, pages.signin(True)
                 if c.lockout.locked(headers.get("x-client-ip", "")):
-                    return 429, {}, pages.signin(True, "Too many wrong tries. Wait 15 minutes.")
+                    return 429, {}, pages.signin(True, _("Too many wrong tries. Wait 15 minutes."))
                 if not c.check(form.get("passphrase", "")):
                     c.lockout.failed(headers.get("x-client-ip", ""))
                     c.sessions.record(False, "passphrase", headers.get("user-agent", ""), headers.get("x-client-ip", ""))
                     time.sleep(1)   # slows down guessing
-                    return 401, {}, pages.signin(True, "Wrong passphrase.")
+                    return 401, {}, pages.signin(True, _("Wrong passphrase."))
                 return c.sign_in(headers, remember=form.get("remember") == "yes", how="passphrase")
-            return 404, {}, pages.message("Not found", "There's nothing here.")
+            return 404, {}, pages.message(_("Not found"), _("There's nothing here."))
         sess = c.session(headers)
         if sess is None:
             return 200 if head == "" else 401, {}, pages.signin(c.hosted, "", self.signin_vaults())
         if method == "POST" and not hmac.compare_digest(form.get("csrf", ""), sess["csrf"]):
-            return 403, {}, pages.message("Not allowed", "This form is out of date. Reload the page and try again.")
+            return 403, {}, pages.message(_("Not allowed"), _("This form is out of date. Reload the page and try again."))
         if head == "" and method == "GET":
             return 200, {}, pages.center_home(self.home_view(sess, sess.pop("flash", "")))
         if head == "signout" and method == "POST":
@@ -334,7 +338,7 @@ class Site:
                 c.lock_all()
             else:
                 m.lock_all("locked on the control center")
-            return 200, {}, pages.center_home(self.home_view(sess, "Every vault is locked. The keys are gone from memory."))
+            return 200, {}, pages.center_home(self.home_view(sess, _("Every vault is locked. The keys are gone from memory.")))
         if head == "devices" and len(parts) == 3 and parts[2] == "signout" and method == "POST":
             token = _cookies(headers).get(c.cookie, "")
             n = c.sessions.end_device(parts[1], token, others=parts[1] == "others")
@@ -357,12 +361,12 @@ class Site:
             cid = unquote(parts[1])
             grant = c.provider.grants.get(cid)
             if grant is None:
-                return 404, {}, pages.message("Not found", "That app isn't connected.", center=True)
+                return 404, {}, pages.message(_("Not found"), _("That app isn't connected."), center=True)
             names = [v.name for v in m.vaults.values() if v.mode != "hidden"]
             note = ""
             if method == "POST":
                 c.provider.set_grant(cid, [n for n in form.get("vault_list", []) if n in names], form.get("change") == "yes")
-                note = "Saved. It applies to the app's next request."
+                note = _("Saved. It applies to the app's next request.")
             grant = c.provider.grants[cid]
             return 200, {}, pages.app_access({"id": cid, "app": c.provider.app_name(cid), "csrf": sess["csrf"],
                                               "vaults": names, "granted": grant.get("vaults", []),
@@ -395,7 +399,7 @@ class Site:
                 except ValueError as exc:
                     error = str(exc)
             return (400 if error else 200), {}, self.settings_page(sess, headers, note, error)
-        return 404, {}, pages.message("Not found", "There's nothing here.")
+        return 404, {}, pages.message(_("Not found"), _("There's nothing here."))
 
     def settings_page(self, sess: dict, headers: dict, note: str = "", error: str = "") -> str:
         c = self.center
@@ -416,7 +420,7 @@ class Site:
                 ask = self.double_check(kind, name, form, sess)
                 if ask:
                     return 200, {}, ask
-                error = "Fill in the new name or folder first."
+                error = _("Fill in the new name or folder first.")
             else:
                 try:
                     note = c.save(kind, {**form, "name": name})
@@ -431,14 +435,14 @@ class Site:
                     return 303, {"Location": "/"}, ""
         row = next((v for v in c.view()["vaults"] if v["name"].casefold() == name.casefold()), None)
         if row is None:
-            return 404, {}, pages.message("Not found", f"No vault called {name!r}.", center=True)
+            return 404, {}, pages.message(_("Not found"), _("No vault called {name}.", name=repr(name)), center=True)
         s = m.sessions.get(row["name"].casefold())
         try:
             from .vault import keys as _keys
             cfg = _keys.read_vault_config_unverified(Path(row["path"], "vault.cryptomator").read_bytes())[0]
-            fmt = f"Cryptomator vault format 8, {cfg.cipher_combo}"
+            fmt = _("Cryptomator vault format 8, {cipher}", cipher=cfg.cipher_combo)
         except Exception:
-            fmt = "Unreadable here (is the folder still there?)"
+            fmt = _("Unreadable here (is the folder still there?)")
         return (400 if error else 200), {}, pages.vault_settings({
             "vault": row, "csrf": sess["csrf"], "note": note, "error": error, "open": s is not None,
             "app": s.app if s else "", "status_code": s.status_code if s else "", "format": fmt,
@@ -451,11 +455,11 @@ class Site:
         where = Path((form.get("where") or "").strip()).expanduser()
         try:
             if not name or any(ch in name for ch in ";=,/\\") or len(name) > 60:
-                raise keys.VaultError("Give the vault a short name without ; = , or slashes.")
+                raise keys.VaultError(_("Give the vault a short name without ; = , or slashes."))
             if any(v["name"].casefold() == name.casefold() for v in c.view()["vaults"]):
-                raise keys.VaultError(f"There's already a vault called {name!r}.")
+                raise keys.VaultError(_("There's already a vault called {name}.", name=repr(name)))
             if not where.is_dir():
-                raise keys.VaultError("That place doesn't exist. Choose a folder that's already there.")
+                raise keys.VaultError(_("That place doesn't exist. Choose a folder that's already there."))
             manage.check_new_password(form.get("new", ""), form.get("again", ""))
             key = manage.create_vault(where / name, form.get("new", ""))
             try:
@@ -467,7 +471,7 @@ class Site:
             return 400, {}, self.settings_page(sess, headers, "", str(exc))
         self.manager._event(name, "vault created on the control center")
         return 200, {}, pages.recovery_page({"vault": name, "key": words, "back": "/", "csrf": sess["csrf"],
-                                             "note": f"{name} is ready, in {pages.home(str(where / name))}."})
+                                             "note": _("{vault} is ready, in {folder}.", vault=name, folder=pages.home(str(where / name)))})
 
     def vault_keys(self, name: str, form: dict, sess: dict):
         """Password change, showing the recovery key, and resetting a forgotten password: the person only, on this
@@ -476,19 +480,19 @@ class Site:
         c, m = self.center, self.manager
         row = next((v for v in c.view()["vaults"] if v["name"].casefold() == name.casefold()), None)
         if row is None:
-            return 404, {}, pages.message("Not found", f"No vault called {name!r}.", center=True)
+            return 404, {}, pages.message(_("Not found"), _("No vault called {name}.", name=repr(name)), center=True)
         kind, folder = form.get("kind"), Path(row["path"])
         back = f"/settings/vault/{quote(row['name'])}"
         wait = m.locked_out(row["name"])
         if wait:
-            return 429, {}, pages.message("Paused", f"Too many wrong tries. Try again in {int(wait // 60) + 1} minutes.",
+            return 429, {}, pages.message(_("Paused"), _("Too many wrong tries. Try again in {n} minutes.", n=int(wait // 60) + 1),
                                           center=True)
         try:
             if kind == "password":
                 manage.check_new_password(form.get("new", ""), form.get("again", ""))
                 manage.change_password(folder, form.get("old", ""), form.get("new", ""))
                 m._event(row["name"], "password changed on the control center")
-                note = "Password changed. Use the new one from now on, in Cryptomator too."
+                note = _("Password changed. Use the new one from now on, in Cryptomator too.")
                 return 200, {}, self.vault_settings("GET", row["name"], {}, sess, {}, note)[2]
             if kind == "show_key":
                 key = keys.unlock_masterkey((folder / "masterkey.cryptomator").read_bytes(), form.get("old", ""))
@@ -501,12 +505,12 @@ class Site:
             manage.check_new_password(form.get("new", ""), form.get("again", ""))
             manage.reset_password(folder, form.get("recovery", ""), form.get("new", ""))
             m._event(row["name"], "password reset with the recovery key on the control center")
-            note = "New password set with the recovery key."
+            note = _("New password set with the recovery key.")
             return 200, {}, self.vault_settings("GET", row["name"], {}, sess, {}, note)[2]
         except keys.WrongPassword:
             m.failures.setdefault(row["name"], []).append(m.clock())
             time.sleep(1)
-            error = "Wrong password."
+            error = _("Wrong password.")
         except keys.VaultError as exc:
             error = str(exc)
         return 400, {}, self.vault_settings("GET", row["name"], {}, sess, {}, "", error)[2]
@@ -523,25 +527,26 @@ class Site:
             new = (form.get("new_name") or "").strip()
             if not new:
                 return None
-            return pages.confirm_change({**base, "title": f"Rename {row['name']}?", "button": "Yes, rename",
+            return pages.confirm_change({**base, "title": _("Rename {vault}?", vault=row['name']), "button": _("Yes, rename"),
                                          "fields": {"kind": "rename", "new_name": new},
-                                         "facts": [("Now", row["name"]), ("New name", new)],
-                                         "lines": ["Your AI apps will know it by the new name.",
-                                                   "If it's open, it locks first."]})
+                                         "facts": [(_("Now"), row["name"]), (_("New name"), new)],
+                                         "lines": [_("Your AI apps will know it by the new name."),
+                                                   _("If it's open, it locks first.")]})
         if kind == "path":
             new = (form.get("path") or "").strip()
             if not new:
                 return None
-            return pages.confirm_change({**base, "title": f"Change {row['name']}'s folder?", "button": "Yes, change folder",
+            return pages.confirm_change({**base, "title": _("Change {vault}'s folder?", vault=row["name"]),
+                                         "button": _("Yes, change folder"),
                                          "fields": {"kind": "path", "path": new},
-                                         "facts": [("Now", pages.home(row["path"])), ("New folder", new)],
-                                         "lines": ["Nothing is copied or moved: the vault entry just points at the new "
-                                                   "folder.", "If it's open, it locks first."]})
-        return pages.confirm_change({**base, "title": f"Remove {row['name']}?", "button": "Yes, remove it",
+                                         "facts": [(_("Now"), pages.home(row["path"])), (_("New folder"), new)],
+                                         "lines": [_("Nothing is copied or moved: the vault entry just points at the new "
+                                                     "folder."), _("If it's open, it locks first.")]})
+        return pages.confirm_change({**base, "title": _("Remove {vault}?", vault=row['name']), "button": _("Yes, remove it"),
                                      "fields": {"kind": "remove"},
-                                     "facts": [("Folder", pages.home(row["path"]))],
-                                     "lines": ["It comes off this list. The vault and its files stay where they are.",
-                                               "AI apps can no longer ask for it. You can add it again anytime."]})
+                                     "facts": [(_("Folder"), pages.home(row["path"]))],
+                                     "lines": [_("It comes off this list. The vault and its files stay where they are."),
+                                               _("AI apps can no longer ask for it. You can add it again anytime.")]})
 
     # ------------------------------------------------ AI-app login (a server only)
 
@@ -560,7 +565,7 @@ class Site:
             return (400 if isinstance(exc, ValueError) else 403), {}, pages.app_login(info, req, names, str(exc))
         if target is None:
             time.sleep(1)
-            return 401, {}, pages.app_login(info, req, names, "Wrong passphrase.")
+            return 401, {}, pages.app_login(info, req, names, _("Wrong passphrase."))
         return 302, {"Location": target, "Referrer-Policy": "no-referrer"}, ""
 
     # ------------------------------------------------ every request
@@ -571,8 +576,9 @@ class Site:
         theme = _cookies(headers).get("theme", "")
         pages.THEME.set("dark" if theme == "dark" else "light")
         pages.HERE.set(path if _safe_next(path) else "/")
+        i18n.LANG.set(i18n.pick(headers.get("accept-language", ""), forced_language()))
         if method == "POST" and not same_origin(headers, self.base):
-            return 403, {}, pages.message("Not allowed", "This form didn't come from this page.")
+            return 403, {}, pages.message(_("Not allowed"), _("This form didn't come from this page."))
         if parts == ["theme"] and method == "POST":   # light <-> dark, remembered by this browser for a year
             nxt = form.get("next", "/")
             new = "light" if theme == "dark" else "dark"
@@ -587,7 +593,7 @@ class Site:
             return self.app_login(method, form, query or {}, headers)
         if self.center is not None and (not parts or parts[0] in ("signin", "signout", "vaults", "settings", "apps", "devices", "activity", "about")):
             return self.center_page(method, parts, form, headers)
-        return 404, {}, pages.message("Not found", "There's nothing here.")
+        return 404, {}, pages.message(_("Not found"), _("There's nothing here."))
 
     def signin_vaults(self) -> list[str]:
         """Vaults offered on a computer's sign-in page (never hidden ones; none on a server)."""
@@ -599,8 +605,9 @@ class Site:
         m = self.manager
         req = m.describe(code)
         if req is None:
-            return 410, {}, pages.message("Link expired", "This unlock link has expired or was already used. "
-                                          "Ask your AI app to unlock the vault again.", center=self.center is not None)
+            return 410, {}, pages.message(_("Link expired"), _("This unlock link has expired or was already used. "
+                                                                 "Ask your AI app to unlock the vault again."),
+                                          center=self.center is not None)
         if method == "GET":
             return 200, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, idle_minutes=int(m.idle // 60),
                                               center=self.center is not None, by_person=req.person,
@@ -616,6 +623,15 @@ class Site:
         if req.signin and self.center is not None and not self.center.hosted:
             return self.center.sign_in(headers or {}, how="vault password")   # in, with that vault open
         return 303, {"Location": f"/vault/{s.status_code}"}, ""
+
+
+def forced_language() -> str:
+    """ENCRYPTOR_LANGUAGE from the settings (environment or the settings file), or "" to follow the browser."""
+    server = sys.modules.get("encryptor_mcp.server")   # loaded whenever pages are served; never imported from here
+    try:
+        return (server.config() if server else os.environ).get("ENCRYPTOR_LANGUAGE", "").strip()
+    except Exception:
+        return ""
 
 
 def _safe_next(path: str) -> bool:

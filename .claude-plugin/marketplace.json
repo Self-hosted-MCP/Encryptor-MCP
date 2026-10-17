@@ -1,0 +1,12 @@
+{
+  "name": "encryptor",
+  "description": "Encryptor MCP for Claude Code: open your Cryptomator vaults, you hold the keys.",
+  "owner": { "name": "s17sh70x2jfl031ag", "url": "https://github.com/s17sh70x2jfl031ag" },
+  "plugins": [
+    {
+      "name": "encryptor-mcp",
+      "source": "./",
+      "description": "Open your Cryptomator vaults from Claude Code. You unlock each vault yourself in your browser."
+    }
+  ]
+}

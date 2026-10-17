@@ -23,7 +23,9 @@ ENV HOST=0.0.0.0 \
 EXPOSE 8767
 
 RUN useradd --create-home --uid 10001 encryptor && mkdir -p /data /vaults && chown encryptor /data
-USER encryptor
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# The entrypoint drops to the user "encryptor" (uid 10001) at once: see docker-entrypoint.sh.
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 HEALTHCHECK --interval=60s --timeout=5s CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8767\")}/health')"
 

@@ -95,6 +95,12 @@ Whether **AI apps may ask to delete the trash for good** is a switch on the cont
 |---|---|---|
 | `ENCRYPTOR_FINDER` | `off` hides **Show in Finder** on a vault's page. Any other value keeps it | `on` (Docker: `off`) |
 
+## Language
+
+| Setting | What it does | Default |
+|---|---|---|
+| `ENCRYPTOR_LANGUAGE` | Show the pages in one language, like `de`, `ja` or `pt-BR`, whatever the browser asks for. Codes and how to add a language: [languages.md](languages.md) | empty (follow the browser's language) |
+
 ## Updates
 
 There is no setting in the file for this. The update check is a switch on the control center's **About** page: **Check GitHub for a new version once a day**. It's off by default. When on, it asks GitHub for the newest release once a day and sends nothing about you. More: [updates.md](updates.md).

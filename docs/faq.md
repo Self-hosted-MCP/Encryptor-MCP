@@ -168,7 +168,7 @@ Yes, with the server version: run it on your own server, then connect the Claude
 <details>
 <summary><b>What languages does it speak?</b></summary>
 
-The pages and the docs are in English. Your AI answers you in your own language, so you can ask in any language it knows.
+The pages come in 20 languages and follow your browser's language: see [languages.md](languages.md). The docs are in English. Your AI answers you in your own language, so you can ask in any language it knows.
 
 </details>
 
@@ -245,8 +245,8 @@ On a computer, the control center runs at `127.0.0.1` (your own computer only) o
 </details>
 
 <details>
-<summary><b>Why isn't there a guide for hosting companies?</b></summary>
+<summary><b>Is a hosting company safe enough?</b></summary>
 
-On a hosting company, your vault keys would sit in that company's memory while a vault is open, and your vault folders would have to be on its disks. That defeats the point of an encrypted vault. Run it on your computer, or on a server you control. See [roadmap.md](roadmap.md).
+It's the weakest of the three ways. While a vault is open, its keys sit in the hosting company's memory, and your vaults live on its disk. The password still never goes through the chat, and vaults lock by themselves. If you can, run it on your computer or on a server you control. If you use one, read [setup-hosting.md](setup-hosting.md) first.
 
 </details>

@@ -56,7 +56,9 @@ python3 scripts/build_mcpb.py             # build the Claude Desktop extension i
 uv run encryptor-mcp help                 # CLI
 ```
 
-User commands: `stdio`, `serve`, `set-passphrase` (writes `LOGIN_HASH` into the `.env` in the config folder), `version`, `help`. There is no `update` command.
+User commands: `stdio`, `serve`, `setup` (adds vaults from the terminal, no password asked), `check` (settings and vault folders, opens nothing), `update` (installs the newest release with uv), `set-passphrase` (writes `LOGIN_HASH` into the `.env` in the config folder), `version`, `help`.
+
+Also shipped: the Claude Code plugin (`.claude-plugin/`, pinned to the release tag: bump it with each release), `railway.json` and `render.yaml` for hosting companies, `docker-entrypoint.sh` (drops to uid 10001 after giving it `/data`), and `scripts/update.sh` for Docker Compose copies.
 
 Run `uv run pytest -q` before committing. Tests use a throwaway settings folder (`conftest.py` sets `ENCRYPTOR_CONFIG_DIR` before anything imports the server) and the test vaults in `tests/fixtures/`. Never write a test that needs a real vault or a real password.
 
@@ -99,7 +101,7 @@ Public wording: never say Encryptor is tested or checked against Cryptomator (it
 - **New setting** → add it to `SETTINGS` in `server.py`, to `.env.example` and to `docs/settings.md` (`tests/test_docs.py` checks the last two).
 - **New tool** → honest `ToolAnnotations` (read only, or `change_tool()` for anything that writes, `destructive=True` for anything final); route changes through the journal; add it to `extension/manifest.json` and `docs/tools.md` (a test checks `docs/tools.md` and the tool count).
 - Changing user-visible behaviour → update the matching page in `docs/` in the same change. Plain, everyday language: short sentences, no jargon, no em dashes. Button labels in the docs must match `pages.py` exactly.
-- GitHub Actions runs only by hand (`workflow_dispatch`): this repository may be private, where minutes are billed. `.github/workflows/extension.yml` builds and attaches the `.mcpb` only for published releases (or a tag run by hand), only in the original repository. Keep third-party actions pinned to a commit.
+- GitHub Actions: **Tests** runs on every push to `main` and every pull request (free on a public repository). `docker-image.yml` and `extension.yml` build only for published releases (or a tag run by hand), only in the original repository. `update-from-releases.yml` runs only in forks that opt in with `AUTO_UPDATE=on`. Keep third-party actions pinned to a commit.
 - `Dockerfile`, `docker-compose.yml` and `Caddyfile` are user setup paths. If you change one, re-check [docs/setup-own-server.md](docs/setup-own-server.md).
 - Don't add a database or new runtime dependencies without a strong reason.
 
@@ -129,7 +131,7 @@ When a person asks you to set Encryptor MCP up for them, follow this. The user g
 
 **Verify, then report**
 
-1. On a server: `GET https://their-address/health` returns `ok`. On a computer: `encryptor-mcp version` prints a version.
+1. On a server: `GET https://their-address/health` returns `ok`. On a computer: `encryptor-mcp check` says everything looks fine.
 2. Help them connect their AI app ([docs/connect-your-ai.md](docs/connect-your-ai.md)) and ask it *"Which Encryptor vaults can you see?"*: it must list their vaults with the modes they wanted.
 3. Let them unlock one vault themselves and check the AI can list a folder. **Don't change their files to test.** Use read-only tools, or a test vault they agree to.
 4. Tell them what you verified and what you couldn't (for example the phone app, if you can't open it).

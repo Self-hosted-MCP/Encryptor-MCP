@@ -1,8 +1,8 @@
 # Updates
 
-Each release has a version tag (`vX.Y.Z`), notes on the [releases page](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases), and the Claude Desktop extension attached. What changed: [CHANGELOG.md](../CHANGELOG.md).
+Each release has a version tag (`vX.Y.Z`), notes on the [releases page](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases), a ready-made Docker image, and the Claude Desktop extension attached. What changed: [CHANGELOG.md](../CHANGELOG.md).
 
-There's no update command and no ready-made Docker image yet. You update with the tool you installed it with: uv, Git and Docker, or the extension file.
+Updates only ever install a published release, never unfinished code.
 
 ## Know when there's an update
 
@@ -15,22 +15,20 @@ There's no update command and no ready-made Docker image yet. You update with th
 | You run it | To update |
 |---|---|
 | Claude Desktop extension | Download the newest [`encryptor-mcp.mcpb`](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) and open it |
-| On your computer (`uv tool`) | `uv tool upgrade encryptor-mcp`, then restart your AI app |
+| On your computer (`uv tool`) | `encryptor-mcp update` (installs the newest release, or says you're up to date), then restart your AI app |
+| Claude Code plugin | `claude plugin marketplace update encryptor`, then restart Claude Code |
 | With `uvx` | Add `--refresh` once to the command, so it fetches the newest code |
-| Docker Compose | `git pull`, then `docker compose up -d --build` |
-| Without Docker, on a server | `uv tool upgrade encryptor-mcp`, then restart `serve` (for example `sudo systemctl restart encryptor-mcp`) |
-
-If `uv tool upgrade` says there's nothing new, reinstall from GitHub:
-
-```bash
-uv tool install --force git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP
-```
+| Docker Compose, built here | `./scripts/update.sh` (moves to the newest release and restarts), or `git pull` and `docker compose up -d --build` |
+| Docker, ready-made image | `docker pull ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:latest`, then start the container again (same `/data` volume) |
+| Railway | **Redeploy** the service |
+| Render | **Manual Deploy** (it pulls `:latest` again) |
+| Without Docker, on a server | `encryptor-mcp update`, then restart `serve` (for example `sudo systemctl restart encryptor-mcp`) |
 
 Restarting locks every open vault, so unlock again afterwards.
 
 ## Update every week by itself (optional)
 
-On a computer, your system can run the update for you. It installs the newest version, or does nothing if you're up to date. Restart your AI app afterwards to use it.
+On a computer, your system can run `encryptor-mcp update` for you. It installs the newest release, or does nothing if you're up to date. Restart your AI app afterwards to use it.
 
 <details>
 <summary><b>Mac</b></summary>
@@ -44,7 +42,7 @@ Save as `~/Library/LaunchAgents/com.encryptor-mcp.update.plist` (replace `YOU` w
 <dict>
   <key>Label</key><string>com.encryptor-mcp.update</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/YOU/.local/bin/uv</string><string>tool</string><string>upgrade</string><string>encryptor-mcp</string></array>
+  <array><string>/Users/YOU/.local/bin/encryptor-mcp</string><string>update</string></array>
   <key>StartCalendarInterval</key><dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer></dict>
   <key>StandardOutPath</key><string>/tmp/encryptor-mcp-update.log</string>
   <key>StandardErrorPath</key><string>/tmp/encryptor-mcp-update.log</string>
@@ -58,7 +56,7 @@ Turn it on:
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.encryptor-mcp.update.plist
 ```
 
-`which uv` shows where uv is, if it's not in `~/.local/bin`.
+`which encryptor-mcp` shows where it is, if it's not in `~/.local/bin`.
 
 </details>
 
@@ -68,7 +66,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.encryptor-mcp.update
 Run `crontab -e`, then add:
 
 ```
-0 9 * * 1 $HOME/.local/bin/uv tool upgrade encryptor-mcp >> $HOME/.cache/encryptor-mcp-update.log 2>&1
+0 9 * * 1 $HOME/.local/bin/encryptor-mcp update >> $HOME/.cache/encryptor-mcp-update.log 2>&1
 ```
 
 </details>
@@ -78,22 +76,32 @@ Run `crontab -e`, then add:
 
 1. Open **Task Scheduler** from the Start menu and click **Create Basic Task**.
 2. Name it "Encryptor MCP update" and choose **Weekly**.
-3. Choose **Start a program**. Program: `uv`. Arguments: `tool upgrade encryptor-mcp`.
+3. Choose **Start a program**. Program: `encryptor-mcp`. Arguments: `update`.
 4. Finish.
 
 </details>
 
-On a server with Docker Compose there's no update script yet. Run the two commands above by hand, after reading the release notes.
+### On your own server (Docker Compose)
+
+[`scripts/update.sh`](../scripts/update.sh) moves your copy to the newest official release and restarts it, only if there's a new one. It refuses to run if you changed files in your copy. Run it by hand, or every week with cron (`crontab -e`):
+
+```
+0 4 * * 1 cd /path/to/Encryptor-MCP && ./scripts/update.sh >> update.log 2>&1
+```
+
+### Your own fork on a hosting company
+
+If Railway or Render builds from your fork of this repository, the fork can follow official releases by itself: in your fork, turn on Actions, then add the repository variable `AUTO_UPDATE` = `on` (**Settings → Secrets and variables → Actions → Variables**). Every Monday, [the workflow](../.github/workflows/update-from-releases.yml) merges the newest release into your fork, and your host rebuilds. It never runs in the original repository, and it stops without changing anything if the release conflicts with your own changes.
 
 ## Staying on one version
 
-Install a version tag instead of the newest code:
+Install a version tag instead of the newest release:
 
 ```bash
 uv tool install --force git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP@v0.1.0
 ```
 
-With Docker Compose: `git checkout v0.1.0`, then `docker compose up -d --build`. For the extension, keep the `.mcpb` file you have and don't open a newer one.
+With Docker Compose: `git checkout v0.1.0`, then `docker compose up -d --build`. With the ready-made image, use the tag `:0.1.0` (exact) or `:0.1` (the newest 0.1.x) instead of `:latest`. For the extension, keep the `.mcpb` file you have and don't open a newer one.
 
 ## Going back
 

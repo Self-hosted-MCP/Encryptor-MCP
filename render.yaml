@@ -1,0 +1,21 @@
+# On Render: the "Deploy to Render" button in the README, or "New > Blueprint" with this repo. Fill in the blank.
+# Runs the ready-made image of the newest official release, so nothing is built and unreleased code never runs.
+# Read docs/setup-hosting.md first: while a vault is open, its keys live in this server's memory at Render.
+services:
+  - type: web
+    name: encryptor-mcp
+    runtime: image
+    image:
+      url: ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:latest
+    # no plan line: Render then uses its smallest paid instance, which can keep a disk. The free plan can't keep
+    # a disk, so your vaults, settings and connected apps would be lost at each restart.
+    healthCheckPath: /health
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: LOGIN_PASSPHRASE    # locks the control center; AI apps ask for it once when they connect (8+ characters)
+        sync: false
+      - key: PORT                # the port Render sends web traffic to
+        value: "8767"

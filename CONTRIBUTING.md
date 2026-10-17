@@ -44,7 +44,7 @@ CRYPTOMATOR_MODS=.jars uv run pytest -q
 
 Without Java or the libraries, those tests are skipped, not failed. A change to anything in `src/encryptor_mcp/vault/` or `changes.py` must pass them before it's merged. The recovery key test also needs Cryptomator.app's own code, so it only runs on a Mac with Cryptomator installed.
 
-The **Tests** workflow on GitHub runs everything on macOS, Windows and Linux. It only runs when started by hand (**Actions**, **Tests**, **Run workflow**), because runs on a private repository are billed.
+The **Tests** workflow on GitHub runs everything on macOS, Windows and Linux, for every push to `main` and every pull request.
 
 ## Rules
 
@@ -55,11 +55,11 @@ The **Tests** workflow on GitHub runs everything on macOS, Windows and Linux. It
 
 ## Releases (maintainers)
 
-1. Set the new version in `pyproject.toml` and `CITATION.cff`. Move the notes in [CHANGELOG.md](CHANGELOG.md) under that version, with the date.
-2. Run the tests (with the reference libraries), then run the **Tests** workflow by hand and wait for it to pass.
+1. Set the new version in `pyproject.toml`, `CITATION.cff` and `.claude-plugin/plugin.json` (both the `version` and the `@vX.Y.Z` in its install line). Move the notes in [CHANGELOG.md](CHANGELOG.md) under that version, with the date.
+2. Run the tests (with the reference libraries) and wait for the **Tests** workflow on GitHub to pass.
 3. Push to `main`, tag it `vX.Y.Z`, and publish a GitHub Release with the changelog notes.
 
-Publishing the release starts the **Claude Desktop extension** workflow. It builds `encryptor-mcp-<version>.mcpb`, checks it with Anthropic's validator, and attaches it to the release, also as `encryptor-mcp.mcpb` so one link always gets the newest. Nothing reaches the extension before a release is published.
+Publishing the release starts two workflows. **Docker image** builds the ready-made image for amd64 and arm64 and publishes it as `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp` (tags: the version, major.minor and `latest`). The **Claude Desktop extension** workflow builds `encryptor-mcp-<version>.mcpb`, checks it with Anthropic's validator, and attaches it to the release, also as `encryptor-mcp.mcpb` so one link always gets the newest. Nothing reaches the image or the extension before a release is published.
 
 ## Writing docs
 

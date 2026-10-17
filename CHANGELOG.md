@@ -12,4 +12,6 @@ First version.
 - Health check (like Cryptomator's, plus damaged files and leftovers) with safe repairs; a fingerprint list that catches cut and swapped files; a private, tamper-evident read log.
 - Show in Finder (Mac), decrypted only in memory.
 - The web version (`encryptor-mcp serve`): OAuth with your passphrase, per-app vault choice, Docker Compose with HTTPS and optional rclone for cloud storage.
-- Claude Desktop extension.
+- Claude Desktop extension, and a Claude Code plugin.
+- Terminal commands: `setup` (add vaults), `check` (settings and vault folders, opens nothing) and `update` (the newest release).
+- A ready-made Docker image for each release (amd64 and arm64), one-click Railway and Render setups, an update script for Docker Compose, and an opt-in weekly update for forks.

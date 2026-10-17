@@ -11,6 +11,10 @@ Commands:
     stdio           run for one AI app on this computer (Claude Desktop, Claude Code, Cursor, Codex, ...)
     serve           run as a web server (VPS, hosting, own server): AI apps connect over HTTPS with your
                     passphrase, and the control center is at the server's address
+    setup           add your vaults here in the terminal, then see how to connect your AI app
+    check           check your settings and vault folders, without opening any vault
+    update          install the newest official release (on a computer, with uv)
+    translate CODE  add or check a language for the pages (see docs/languages.md)
     set-passphrase  choose the passphrase for the web version (only its hash is stored)
     version         show the installed version
 
@@ -64,7 +68,7 @@ ENV_FILE = Path(os.environ.get("ENCRYPTOR_ENV_FILE") or CONFIG_DIR / ".env").exp
 SETTINGS = ("ENCRYPTOR_VAULTS", "ENCRYPTOR_MODES", "ENCRYPTOR_IDLE_MINUTES", "ENCRYPTOR_MAX_HOURS", "ENCRYPTOR_UNLOCK",
             "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER", "PUBLIC_URL", "LOGIN_HASH",
             "LOGIN_PASSPHRASE", "HOST", "PORT", "RENDER_EXTERNAL_URL", "RAILWAY_PUBLIC_DOMAIN", "ALLOWED_REDIRECT_HOSTS",
-            "ENCRYPTOR_READ_ONLY")
+            "ENCRYPTOR_READ_ONLY", "ENCRYPTOR_LANGUAGE")
 STATE_DIR = Path(os.environ.get("ENCRYPTOR_DATA_DIR") or CONFIG_DIR / "state").expanduser()
 PAGE_FILE = STATE_DIR / "settings.json"    # vaults, modes and auto-lock chosen on the control center
 OAUTH_FILE = STATE_DIR / "oauth.json"      # the web version's connected AI apps (tokens only as fingerprints)
@@ -1132,6 +1136,96 @@ def current_version() -> str:
         return "0.0.0"
 
 
+def fetch_latest_release() -> dict:
+    """The newest official release on GitHub: {"tag": "v0.2.0", "url": ...}. Raises on no network or no release."""
+    import urllib.request
+    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
+                                 headers={"Accept": "application/vnd.github+json", "User-Agent": APP})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        info = json.loads(r.read().decode())
+    return {"tag": str(info.get("tag_name", "")), "url": str(info.get("html_url", ""))}
+
+
+def run_update() -> None:
+    """The `update` command, on a computer: installs the newest official release with uv. Never unreleased code."""
+    import re as _re
+    import shutil
+    import subprocess
+    try:
+        latest = fetch_latest_release()
+    except Exception as exc:
+        sys.exit("Couldn't ask GitHub for the newest release" + (": none is published yet." if "404" in str(exc)
+                 else f" ({exc})."))
+    current, tag = current_version(), latest["tag"]
+    if not _re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        sys.exit("No official release found.")
+    if not _newer(tag.lstrip("v"), current):
+        print(f"Up to date ({current}).")
+        return
+    uv = shutil.which("uv")
+    if not uv:
+        sys.exit("uv isn't on this computer's PATH. Install uv, or update by hand: see docs/updates.md.")
+    print(f"Updating {current} -> {tag} ...")
+    if subprocess.run([uv, "tool", "install", "--force", f"git+https://github.com/{REPO}@{tag}"]).returncode:
+        sys.exit("The update failed; the version you had is still installed.")
+    print(f"Updated to {tag}. Restart your AI app (and serve, if it runs) to use it. What's new: {latest['url']}")
+
+
+def check() -> None:
+    """The `check` command: settings and vault folders, without unlocking anything or asking for a password."""
+    cfg = config()
+    print(f"Encryptor MCP {current_version()}")
+    print(f"Settings file: {ENV_FILE}" + ("" if ENV_FILE.exists() else " (not there: using the control center and "
+                                                                       "environment variables)"))
+    print(f"Control center choices: {PAGE_FILE}" + ("" if PAGE_FILE.exists() else " (none yet)"))
+    rows = vault_rows(cfg)
+    problems = 0
+    if not rows:
+        print("No vaults yet. Add one with: encryptor-mcp setup (or on the control center).")
+    for r in rows:
+        folder = Path(r["path"])
+        if not folder.is_dir():
+            state, problems = "folder not found", problems + 1
+        elif not (folder / "vault.cryptomator").is_file():
+            state, problems = "no vault.cryptomator in this folder", problems + 1
+        else:
+            try:
+                vc = keys.read_vault_config_unverified((folder / "vault.cryptomator").read_bytes())[0]
+                state = f"ok (format {vc.format}, {vc.cipher_combo})"
+            except keys.VaultError as exc:
+                state, problems = f"can't be used: {exc}", problems + 1
+        mode = dict(page_html.MODES).get(r["mode"], r["mode"])
+        print(f"  {r['name']}: {folder}  [{mode}]  {state}" + ("  (default)" if r.get("default") else ""))
+    if read_only_all(cfg):
+        print("Read only for every AI app: on.")
+    if cfg.get("LOGIN_HASH") or cfg.get("LOGIN_PASSPHRASE"):
+        public = public_url(cfg)
+        print(f"Server version: passphrase set; address {public}" + ("" if public.startswith("https://") or
+              public.startswith(("http://localhost", "http://127.0.0.1")) else " (must start with https://)"))
+    if problems:
+        sys.exit(f"{problems} problem(s) found. See docs/troubleshooting.md.")
+    print("Everything looks fine. No vault was opened and no password was asked for.")
+
+
+def setup() -> None:
+    """The `setup` command: add vaults from the terminal, then say how to connect an AI app. No password is asked:
+    vaults are unlocked later, on a page in the browser, when the AI needs one."""
+    print("Add your Cryptomator vaults. Press Enter on an empty name when you're done.")
+    while True:
+        name = input("Vault name (like Taxes): ").strip()
+        if not name:
+            break
+        path = input("Its folder (the one with vault.cryptomator in it): ").strip().strip("'\"")
+        mode = input("May the AI change files there? (y/n, Enter = y): ").strip().lower()
+        try:
+            print(settings_save("add", {"name": name, "path": path, "mode": "read" if mode.startswith("n") else "full"}))
+        except ValueError as exc:
+            print(f"Not added: {exc}")
+    print("\nNow connect your AI app. For Claude Code:\n"
+          f"  claude mcp add -s user encryptor -- {APP} stdio\n"
+          "Other apps: docs/connect-your-ai.md. Then ask your AI: \"Which Encryptor vaults can you see?\"")
+
+
 def set_passphrase() -> None:
     import getpass
     from .auth import MIN_PASSPHRASE
@@ -1194,6 +1288,15 @@ def main() -> None:
                 _mounts.unmount_all()
             if _manager:
                 _manager.lock_all("locked: the AI app closed")
+    elif mode == "setup":
+        setup()
+    elif mode == "check":
+        check()
+    elif mode == "update":
+        run_update()
+    elif mode == "translate":
+        from .i18n import translate
+        translate(sys.argv[2:])
     elif mode == "version":
         print(current_version())
     else:

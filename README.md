@@ -113,12 +113,19 @@ More in [docs/how-it-works.md](docs/how-it-works.md).
 |---|---|---|---|---|---|
 | **Claude Desktop extension** | Your computer, inside Claude Desktop | No | Free | 2 minutes, no terminal | [claude-desktop-extension.md](docs/claude-desktop-extension.md) |
 | **1. Your computer** | Mac, Windows or Linux, for any AI app on it | No | Free | 5 minutes | [setup-computer.md](docs/setup-computer.md) |
+| **Claude Code plugin** | Your computer, inside Claude Code | No | Free | 1 minute | [below](#quick-start-about-5-minutes) |
 | **2. Your own server** | A VPS or a computer at home, with Docker | Yes, always | Free at home, or a few dollars a month for a VPS | 15 minutes, for people used to servers | [setup-own-server.md](docs/setup-own-server.md) |
+| **3. A hosting company** | Railway, Render or similar | Yes, always | A few dollars a month | 10 minutes, no terminal | [setup-hosting.md](docs/setup-hosting.md) |
 
-On a computer, vaults can be in any folder it can reach. On a server, the vault folders must be on that server, or reached through rclone ([where-your-vaults-live.md](docs/where-your-vaults-live.md)).
+On a computer, vaults can be in any folder it can reach. On a server, the vault folders must be on that server, or reached through rclone. On a hosting company, they live on its disk ([where-your-vaults-live.md](docs/where-your-vaults-live.md)).
+
+<a href="https://railway.com/deploy/encryptor-mcp"><img src="https://railway.com/button.svg" alt="Deploy on Railway"></a> <a href="https://render.com/deploy?repo=https://github.com/s17sh70x2jfl031ag/Encryptor-MCP"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"></a>
+
+> [!CAUTION]
+> On a hosting company, an open vault's keys live in that company's memory. Read [setup-hosting.md](docs/setup-hosting.md) first, and prefer your own computer or server when you can.
 
 > [!TIP]
-> Not sure? Start with **1** (or the extension, if you use Claude Desktop): free, and your keys never leave your computer. Move to **2** when you want your vaults on your phone too.
+> Not sure? Start with **1** (or the extension or plugin, if you use Claude Desktop or Claude Code): free, and your keys never leave your computer. Move to **2** when you want your vaults on your phone too.
 >
 > Using an AI coding agent like Claude Code, Codex or Cursor? Ask it to set this up for you: [AGENTS.md](AGENTS.md) explains the project to it.
 
@@ -156,13 +163,19 @@ All 23 tools: [docs/tools.md](docs/tools.md). Ideas for what to ask: [docs/examp
    claude mcp add encryptor -s user -- encryptor-mcp stdio
    ```
 
+   Or install the Claude Code plugin instead of steps 1 and 2 (it needs uv):
+
+   ```
+   /plugin install encryptor-mcp --marketplace s17sh70x2jfl031ag/Encryptor-MCP
+   ```
+
    Claude Desktop, Cursor, Codex and 23 more apps: [docs/connect-your-ai.md](docs/connect-your-ai.md). Most apps want:
 
    ```json
    { "mcpServers": { "encryptor": { "command": "encryptor-mcp", "args": ["stdio"] } } }
    ```
 
-3. Ask your AI app: *"Open my Encryptor control center."* It opens in your browser. Add your vaults on **Settings**, under **Add a vault**, or create a new one.
+3. Ask your AI app: *"Open my Encryptor control center."* It opens in your browser. Add your vaults on **Settings**, under **Add a vault**, or create a new one. Or add them in the terminal with `encryptor-mcp setup`, and check everything with `encryptor-mcp check`.
 4. Ask your AI about your files. When it needs a vault, you unlock it in your browser.
 
 Step by step, with what you should see: [docs/setup-computer.md](docs/setup-computer.md).
@@ -180,6 +193,7 @@ Your own page for your vaults: unlock and lock, browse files, the record of chan
 | [Claude Desktop extension](docs/claude-desktop-extension.md) | You use Claude Desktop and want one click |
 | [Setup on your computer](docs/setup-computer.md) | You want to try it, free, with any AI app |
 | [Setup on your own server](docs/setup-own-server.md) | You want your vaults on your phone, and have a server with Docker |
+| [Setup on a hosting company](docs/setup-hosting.md) | You want it always on, without a terminal, and accept the trade-off |
 | [Connect your AI app](docs/connect-your-ai.md) | It's installed and you want to use it in your app |
 | [Where your vaults live](docs/where-your-vaults-live.md) | Your vaults are in Nextcloud, Dropbox, iCloud, a USB disk or the cloud |
 | [Things to ask](docs/examples.md) | You want ideas |
@@ -188,6 +202,7 @@ Your own page for your vaults: unlock and lock, browse files, the record of chan
 | [Vaults and apps](docs/vaults-and-apps.md) | You want to choose what each AI app may see and change |
 | [Undo and backups](docs/undo-and-backups.md) | Something changed and you want it back |
 | [Every setting](docs/settings.md) | You want to change modes, auto-lock, approvals or ports |
+| [Languages](docs/languages.md) | You want the pages in another language, or to fix a translation |
 | [Safety](docs/safety.md) | Before you let an AI change your files |
 | [Threat model](docs/threat-model.md) | You want to know what it protects against, and what not |
 | [Privacy](docs/privacy.md) | You want to know what is kept and where |
@@ -207,9 +222,8 @@ Your own page for your vaults: unlock and lock, browse files, the record of chan
 - **Older vaults** (format 6 and 7, from Cryptomator before 1.6). A current Cryptomator can upgrade them.
 - **Cryptomator Hub vaults**, and vaults whose key file is kept outside the vault folder. Encryptor opens a vault with the `masterkey.cryptomator` file inside it and your vault password.
 - **Show in Finder on Windows and Linux.** It's a Mac feature for now.
-- **A hosting company** (Railway, Render and the like). The vault keys would sit in that company's memory, and your vault folders would have to be on its disk. Not planned: see [roadmap.md](docs/roadmap.md).
+- **Your cloud vaults on a hosting company.** There, vaults live on the hosting company's disk. To reach vaults in Nextcloud, Dropbox and the like from a server, use your own server with rclone.
 - **Pictures and PDFs in the chat.** The AI reads text files. You can view pictures and download PDFs on the control center.
-- **Pages in other languages.** The pages are in English. Your AI app answers you in your own language.
 
 ## Help and feedback
 
