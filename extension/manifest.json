@@ -65,7 +65,7 @@
     "vaults": {
       "type": "string",
       "title": "Vaults (optional)",
-      "description": "Name=/path/to/vault;Other=/path/to/other. You can leave this empty and add vaults on the control center instead. No passwords here: you type those only on the unlock page.",
+      "description": "A vault folder, or several separated by ; (each may start with a name: Taxes=/path/to/vault). You can leave this empty and add vaults on the control center instead. No passwords here: you type those only on the unlock page.",
       "required": false,
       "default": ""
     },

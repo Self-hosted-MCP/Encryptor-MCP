@@ -128,6 +128,10 @@ def vault_rows(cfg: dict) -> list[dict]:
     for item in (cfg.get("ENCRYPTOR_VAULTS") or "").split(";"):
         if "=" in item:
             name, path = (s.strip() for s in item.split("=", 1))
+        else:   # a folder alone: the vault is named after it
+            path = item.strip().rstrip("/\\")
+            name = Path(path).expanduser().name if path else ""
+        if name:
             if name.casefold() in removed:
                 continue
             ov = overrides.get(name.casefold(), {})

@@ -44,6 +44,12 @@ def test_setup_adds_vaults_and_refuses_wrong_folders(tmp_path):
     assert "Mine:" in r.stdout and "[Read only]" in r.stdout and "Bad" not in r.stdout
 
 
+def test_a_vault_folder_without_a_name(tmp_path):
+    folder = FIXTURES / "vault-SIV_GCM"
+    r = run(tmp_path, "check", ENCRYPTOR_VAULTS=f"{folder}/;Other={FIXTURES / 'vault-SIV_CTRMAC'}")
+    assert "vault-SIV_GCM:" in r.stdout and "Other:" in r.stdout and r.returncode == 0
+
+
 def test_help_lists_every_command(tmp_path):
     out = run(tmp_path, "help").stdout
     for cmd in ("stdio", "serve", "setup", "check", "update", "translate", "set-passphrase", "version"):

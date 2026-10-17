@@ -55,7 +55,7 @@ The **About** page has the update check: [Updates](#updates) below.
 
 | Setting | What it does | Default |
 |---|---|---|
-| `ENCRYPTOR_VAULTS` | Your vaults, as `Name=/path/to/vault;Other=/path/to/other`. Each path is the folder that holds `vault.cryptomator`. `~` means your home folder | none |
+| `ENCRYPTOR_VAULTS` | Your vaults, as `Name=/path/to/vault;Other=/path/to/other`. Each path is the folder that holds `vault.cryptomator`. A folder without `Name=` is named after the folder. `~` means your home folder | none |
 | `ENCRYPTOR_MODES` | What the AI may do with each vault: `Name=read,Other=hidden`. Modes are `full` (read and change), `read` and `hidden`. A mode the program doesn't know becomes `read`, the safe one | `full` |
 
 Vaults you add on the control center don't need these at all. More about modes: [vaults-and-apps.md](vaults-and-apps.md).

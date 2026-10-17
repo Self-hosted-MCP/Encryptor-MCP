@@ -20,7 +20,7 @@ You don't need a password to install it. Vault passwords are typed only on the u
 
    | Field | What to put |
    |---|---|
-   | **Vaults (optional)** | `Name=/path/to/vault;Other=/path/to/other`. Leave it empty to add vaults on the control center instead |
+   | **Vaults (optional)** | A vault folder, like `~/Nextcloud/Taxes`, or several separated by `;`. To give one another name: `Taxes 2025=~/Nextcloud/Taxes`. Leave it empty to add vaults on the control center instead |
    | **Lock after minutes without use** | An open vault locks by itself after this long. 10 by default |
 
 4. Click **Install**, and make sure the extension is turned on.
