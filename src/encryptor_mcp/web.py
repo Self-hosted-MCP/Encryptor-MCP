@@ -281,7 +281,7 @@ class Site:
         if head == "devices" and len(parts) == 3 and parts[2] == "signout" and method == "POST":
             token = _cookies(headers).get(c.cookie, "")
             n = c.sessions.end_device(parts[1], token, others=parts[1] == "others")
-            return 303, {"Location": "/settings#devices"}, ""
+            return 303, {"Location": "/activity#devices"}, ""
         if head == "vaults" and len(parts) == 3 and method == "POST":
             name = unquote(parts[1])
             try:
@@ -299,6 +299,19 @@ class Site:
         if head == "apps" and len(parts) == 3 and parts[2] == "disconnect" and method == "POST" and c.provider:
             c.provider.disconnect(unquote(parts[1]))
             return 303, {"Location": "/"}, ""
+        if head == "activity" and len(parts) == 1 and method == "GET":
+            token = _cookies(headers).get(c.cookie, "")
+            return 200, {}, pages.activity({"csrf": sess["csrf"], "devices": c.sessions.devices(token),
+                                            "log": list(reversed(c.sessions.log[-50:]))})
+        if head == "about" and len(parts) == 1:
+            note, error = "", ""
+            if method == "POST":
+                kind = form.get("kind", "")
+                try:
+                    note = c.save(kind, form) if kind in ("updates", "check_now") else ""
+                except ValueError as exc:
+                    error = str(exc)
+            return 200, {}, pages.about({**c.view(), "csrf": sess["csrf"], "note": note, "error": error})
         if head == "settings" and len(parts) == 3 and parts[1] == "vault":
             return self.vault_settings(method, unquote(parts[2]), form, sess, headers)
         if head == "settings":
@@ -393,7 +406,7 @@ class Site:
             return self.vault_page(method, parts, form, headers)
         if parts[:1] == ["login"] and self.center and self.center.provider:
             return self.app_login(method, form, query or {})
-        if self.center is not None and (not parts or parts[0] in ("signin", "signout", "vaults", "settings", "apps", "devices")):
+        if self.center is not None and (not parts or parts[0] in ("signin", "signout", "vaults", "settings", "apps", "devices", "activity", "about")):
             return self.center_page(method, parts, form, headers)
         return 404, {}, pages.message("Not found", "There's nothing here.")
 

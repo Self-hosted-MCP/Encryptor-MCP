@@ -359,10 +359,11 @@ def test_devices_and_sign_in_log(hosted):
     other.post("/signin", data={"passphrase": PASS}, headers={**o, "user-agent": "Mozilla/5.0 (iPhone) Safari/605"})
     r = client.post("/signin", data={"passphrase": PASS, "remember": "yes"}, headers=o, follow_redirects=False)
     assert "Max-Age=7776000" in r.headers["set-cookie"]
-    page = client.get("/settings").text
+    page = client.get("/activity").text
     assert "Safari on iPhone" in page and "this browser" in page and "remembered 90 days" in page
     assert "Refused" in page and "Signed in" in page and PASS not in page
-    assert "http://localhost/mcp" in page                       # the address to give AI apps
+    assert "Your AI apps can&#x27;t see this page" in page or "Your AI apps can't see this page" in page
+    assert "http://localhost/mcp" in client.get("/settings").text   # the address to give AI apps
     csrf = csrf_of(page)
     client.post("/devices/others/signout", data={"csrf": csrf}, headers=o)
     assert other.get("/").text.count("Passphrase") >= 1        # the other browser is signed out
@@ -373,11 +374,11 @@ def test_devices_and_sign_in_log(hosted):
 def test_about_and_update_check(local, monkeypatch):
     client, lp, _ = local
     csrf = signed_in(client, lp)
-    page = client.get("/settings").text
+    page = client.get("/about").text
     assert "AGPL-3.0" in page and "Report a security problem privately" in page and "Not made by or affiliated" in page
     import io, json as _json, urllib.request
     monkeypatch.setattr(server, "current_version", lambda: "0.1.0")
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda req, timeout=5: io.BytesIO(_json.dumps({"tag_name": "v0.2.0", "html_url": "https://x"}).encode()))
-    r = client.post("/settings", data={"csrf": csrf, "kind": "check_now"}, headers={"origin": lp.base})
+    r = client.post("/about", data={"csrf": csrf, "kind": "check_now"}, headers={"origin": lp.base})
     assert "Version 0.2.0 is available" in r.text

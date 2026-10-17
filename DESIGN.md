@@ -321,5 +321,5 @@ Vaults, apps, trash and files: a 20px stroke icon (files) or status dot (vaults)
 
 - **Tagline:** under the "Encryptor MCP" name on every page, 13px ink-2: "Encrypted vaults for your AI agents. You hold the keys."
 - **Vault lists** (Your vaults, Settings > Vaults): each vault gets 14px above and below, separated by a 1.5px dashed `--line` divider; other lists keep the hairline on the rule.
-- **Settings** is a stack of cards: Vaults, Add a vault, Auto-lock, Safety, Connect an AI app (server only), Signed-in browsers with the 7-day sign-in log, About and help. Each vault has its own settings page (the AI may, default vault, its own auto-lock, name and folder, remove).
+- **Settings** is a stack of cards: Vaults, Add a vault, Auto-lock, Safety, Connect an AI app (server only), and Connect an AI app (server only). Activity and About are their own menu items: Activity holds signed-in browsers and the 7-day sign-in log under a lavender note that it is private to the person and never shown to AI apps; About holds version, updates and Help links. Each vault has its own settings page (the AI may, default vault, its own auto-lock, name and folder, remove).
 

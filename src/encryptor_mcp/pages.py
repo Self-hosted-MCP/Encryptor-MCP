@@ -242,7 +242,7 @@ def page(title: str, body: str, *, wide: bool = False, nav: str = "") -> str:
 
 def center_nav(csrf: str = "", here: str = "") -> str:
     """Links of the control center, for a signed-in person."""
-    links = [("/", "Vaults"), ("/settings", "Settings")]
+    links = [("/", "Vaults"), ("/settings", "Settings"), ("/activity", "Activity"), ("/about", "About")]
     out = "".join(f'<a href="{h}"{" aria-current=page" if h == here else ""}>{t}</a>' for h, t in links)
     if csrf:
         out += (f'<form method="post" action="/signout" style="margin:0"><input type="hidden" name="csrf" '
@@ -482,50 +482,6 @@ def settings(d: dict) -> str:
               + _toggle("allow_purge", d["allow_purge"],
                         "AI apps may ask to delete the trash for good (you still approve each time)")
               + '<div class="actions"><button class="btn plain" type="submit">Save</button></div></form>')
-    dev_rows = []
-    for dv in d.get("devices", []):
-        who = esc(dv["agent"] or "A browser") + (" · this browser" if dv["this"] else "")
-        meta = (f'Since {_when(dv["since"])} · last seen {_when(dv["seen"])}'
-                + (f' · {esc(dv["ip"])}' if dv.get("ip") and dv["ip"] != "this computer" else "")
-                + (" · remembered 90 days" if dv.get("remember") else ""))
-        out = ("" if dv["this"] else
-               f'<form method="post" action="/devices/{esc(dv["id"])}/signout">{_csrf(d["csrf"])}'
-               f'<button class="btn small plain" type="submit">Sign out</button></form>')
-        dev_rows.append(f'<li><div class="main"><div class="name">{who}</div><div class="meta">{meta}</div></div>{out}</li>')
-    others = sum(1 for dv in d.get("devices", []) if not dv["this"])
-    devices = (f'<ul class="rows">{"".join(dev_rows)}</ul>'
-               + (f'<form method="post" action="/devices/others/signout">{_csrf(d["csrf"])}<div class="actions">'
-                  '<button class="btn plain" type="submit">Sign out every other browser</button></div></form>' if others else ""))
-    log_rows = "".join(
-        f'<tr><td class="when">{_when(e["time"])}</td><td class="what">{"Signed in" if e["ok"] else "Refused"}'
-        f' · {esc(e["how"])}<small>{esc(e["agent"])}{(" · " + esc(e["ip"])) if e.get("ip") and e["ip"] != "this computer" else ""}'
-        f'</small></td><td></td></tr>' for e in d.get("log", []))
-    log = (f'<table class="record">{log_rows}</table>' if log_rows else '<p class="empty">No sign-ins yet.</p>')
-    upd = d.get("update") or {}
-    if upd.get("newer"):
-        upd_line = (f'<p class="msg ok">Version {esc(upd["latest"])} is available. '
-                    f'<a class="link" href="{esc(upd.get("url") or "https://github.com/" + d["repo"] + "/releases")}">What\'s new</a></p>')
-    elif upd.get("error"):
-        upd_line = f'<p class="meta">{esc(upd["error"])}</p>'
-    elif upd.get("latest"):
-        upd_line = '<p class="meta">You have the newest version.</p>'
-    else:
-        upd_line = ""
-    repo = f'https://github.com/{d["repo"]}'
-    about = (f'<dl class="facts"><dt>Version</dt><dd>{esc(d["version"])}</dd><dt>License</dt><dd>AGPL-3.0</dd></dl>'
-             + upd_line
-             + f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="updates">'
-             + _toggle("on", d["update_check"], "Check GitHub for a new version once a day (only the version number is asked)")
-             + '<div class="actions"><button class="btn plain" type="submit">Save</button></form>'
-             + f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="check_now">'
-               '<button class="btn plain" type="submit">Check now</button></form></div>'
-             + f'<ul class="rows"><li><div class="main"><a class="name link" href="{repo}">Source code</a>'
-               '<div class="meta">Open source under the AGPL-3.0</div></div></li>'
-             + f'<li><div class="main"><a class="name link" href="{repo}/issues/new">Report a problem or ask a question</a>'
-               '<div class="meta">On GitHub</div></div></li>'
-             + f'<li><div class="main"><a class="name link" href="{repo}/security/advisories/new">Report a security problem privately</a>'
-               '<div class="meta">Only the maintainer sees it</div></div></li></ul>'
-             + '<p class="note">Works with Cryptomator vaults. Not made by or affiliated with Cryptomator.</p>')
     connect = (f'<section class="card"><h2><span class="mark">Connect an AI app</span></h2>'
                f'<p>Add this address to your AI app as a connector:</p><p class="meta"><b>{esc(d["mcp_url"])}</b></p>'
                '<p class="note" style="margin-top:0">You type your passphrase once and choose which vaults it may ask for.</p></section>'
@@ -546,11 +502,87 @@ def settings(d: dict) -> str:
             '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form></section>'
             f'<section class="card"><h2><span class="mark">Auto-lock</span></h2>{idle}</section>'
             f'<section class="card" id="safety"><h2><span class="mark">Safety</span></h2>{safety}</section>'
-            f'{connect}'
-            f'<section class="card" id="devices"><h2><span class="mark">Signed-in browsers</span></h2>{devices}'
-            f'<h2><span class="mark">Sign-ins, last 7 days</span></h2>{log}</section>'
-            f'<section class="card"><h2><span class="mark">About and help</span></h2>{about}</section>')
+            f'{connect}')
     return page("Settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
+
+
+def _devices_html(d: dict) -> str:
+    dev_rows = []
+    for dv in d.get("devices", []):
+        who = esc(dv["agent"] or "A browser") + (" · this browser" if dv["this"] else "")
+        meta = (f'Since {_when(dv["since"])} · last seen {_when(dv["seen"])}'
+                + (f' · {esc(dv["ip"])}' if dv.get("ip") and dv["ip"] != "this computer" else "")
+                + (" · remembered 90 days" if dv.get("remember") else ""))
+        out = ("" if dv["this"] else
+               f'<form method="post" action="/devices/{esc(dv["id"])}/signout">{_csrf(d["csrf"])}'
+               f'<button class="btn small plain" type="submit">Sign out</button></form>')
+        dev_rows.append(f'<li><div class="main"><div class="name">{who}</div><div class="meta">{meta}</div></div>{out}</li>')
+    others = sum(1 for dv in d.get("devices", []) if not dv["this"])
+    devices = (f'<ul class="rows">{"".join(dev_rows)}</ul>'
+               + (f'<form method="post" action="/devices/others/signout">{_csrf(d["csrf"])}<div class="actions">'
+                  '<button class="btn plain" type="submit">Sign out every other browser</button></div></form>' if others else ""))
+    return devices
+
+
+def _log_html(d: dict) -> str:
+    log_rows = "".join(
+        f'<tr><td class="when">{_when(e["time"])}</td><td class="what">{"Signed in" if e["ok"] else "Refused"}'
+        f' · {esc(e["how"])}<small>{esc(e["agent"])}{(" · " + esc(e["ip"])) if e.get("ip") and e["ip"] != "this computer" else ""}'
+        f'</small></td><td></td></tr>' for e in d.get("log", []))
+    log = (f'<table class="record">{log_rows}</table>' if log_rows else '<p class="empty">No sign-ins yet.</p>')
+    return log
+
+
+def _about_html(d: dict) -> str:
+    upd = d.get("update") or {}
+    if upd.get("newer"):
+        upd_line = (f'<p class="msg ok">Version {esc(upd["latest"])} is available. '
+                    f'<a class="link" href="{esc(upd.get("url") or "https://github.com/" + d["repo"] + "/releases")}">What\'s new</a></p>')
+    elif upd.get("error"):
+        upd_line = f'<p class="meta">{esc(upd["error"])}</p>'
+    elif upd.get("latest"):
+        upd_line = '<p class="meta">You have the newest version.</p>'
+    else:
+        upd_line = ""
+    repo = f'https://github.com/{d["repo"]}'
+    about = (f'<dl class="facts"><dt>Version</dt><dd>{esc(d["version"])}</dd><dt>License</dt><dd>AGPL-3.0</dd></dl>'
+             + upd_line
+             + f'<form method="post" action="/about">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="updates">'
+             + _toggle("on", d["update_check"], "Check GitHub for a new version once a day (only the version number is asked)")
+             + '<div class="actions"><button class="btn plain" type="submit">Save</button></form>'
+             + f'<form method="post" action="/about">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="check_now">'
+               '<button class="btn plain" type="submit">Check now</button></form></div>'
+             + '<h2><span class="mark">Help</span></h2>'
+             + f'<ul class="rows"><li><div class="main"><a class="name link" href="{repo}">Source code</a>'
+               '<div class="meta">Open source under the AGPL-3.0</div></div></li>'
+             + f'<li><div class="main"><a class="name link" href="{repo}/issues/new">Report a problem or ask a question</a>'
+               '<div class="meta">On GitHub</div></div></li>'
+             + f'<li><div class="main"><a class="name link" href="{repo}/security/advisories/new">Report a security problem privately</a>'
+               '<div class="meta">Only the maintainer sees it</div></div></li></ul>'
+             + '<p class="note">Works with Cryptomator vaults. Not made by or affiliated with Cryptomator.</p>')
+    return about
+
+
+def activity(d: dict) -> str:
+    """Signed-in browsers and the sign-in log: the person's own, never shown to AI apps."""
+    devices, log = _devices_html(d), _log_html(d)
+    body = (f'{_msg(d.get("note", ""), ok=True)}'
+            '<section class="card"><h1><span class="mark">Activity</span></h1>'
+            '<p class="msg ok">Private to you. Your AI apps can\'t see this page or these logs.</p>'
+            f'<h2 id="devices"><span class="mark">Signed-in browsers</span></h2>{devices}</section>'
+            f'<section class="card"><h2><span class="mark">Sign-ins, last 7 days</span></h2>{log}'
+            '<p class="note">Kept on this computer or server only, for 7 days. Passphrases are never written down.</p>'
+            '</section>')
+    return page("Activity", body, wide=True, nav=center_nav(d["csrf"], "/activity"))
+
+
+def about(d: dict) -> str:
+    body = (f'{_msg(d.get("error", ""))}{_msg(d.get("note", ""), ok=True)}'
+            '<section class="card"><h1><span class="mark">About</span></h1>'
+            '<p>Encryptor MCP lets your AI agents read and write inside your Cryptomator vaults, while the password '
+            'stays with you and every change can be undone.</p>'
+            f'{_about_html(d)}</section>')
+    return page("About", body, wide=True, nav=center_nav(d["csrf"], "/about"))
 
 
 def vault_settings(d: dict) -> str:
