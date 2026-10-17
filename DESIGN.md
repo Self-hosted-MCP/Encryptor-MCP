@@ -7,6 +7,7 @@ colors:
   stamp: "#4b3a8f"
   stamp-soft: "#ece8f7"
   marker: "#ffe27a"
+  marker-2: "#e6defc"
   red: "#b5361f"
   red-soft: "#fbeae6"
   margin: "#e3897d"
@@ -20,6 +21,7 @@ colors:
   stamp-dark: "#b9a8f2"
   stamp-soft-dark: "#272240"
   marker-dark: "rgba(232,180,40,.42)"
+  marker-2-dark: "rgba(150,125,240,.30)"
   red-dark: "#ff8a73"
   red-soft-dark: "#3a1d18"
   margin-dark: "#7a3b33"
@@ -186,6 +188,7 @@ Cool paper and ink, with two pigments that each carry one meaning: violet means 
 
 ### Highlighter
 - **Marker Yellow** (marker): only the highlighter stroke behind page titles (h1). In dark mode it is a translucent amber (marker-dark) so light ink stays readable over it.
+- **Marker Lavender** (marker-2): a softer, thinner highlighter behind section titles (h2), the complement of the yellow and kin to the violet stamp. Dark: marker-2-dark.
 
 ### Neutral
 - **Card Stock** (card): the card surface; also the text color on ink-filled buttons.
@@ -222,7 +225,7 @@ Cool paper and ink, with two pigments that each carry one meaning: violet means 
 
 **The On-The-Rule Rule.** Every text line box is 28px (body is 16px/1.75). Margins between blocks are 28px (the gap under the headline is 26.5px in code, a leftover from the removed 1.5px head rule), so text keeps landing on the card's rules.
 
-**The Highlighter Rule.** Page titles (h1 only) get the marker stroke: a yellow band from 53% to 90% of the line height, angled 176deg, with uneven rounded ends (0.25em 0.6em 0.35em 0.5em), 0.18em padding and -0.1em margin, cloned on every wrapped line. Section titles (h2) and body text never get it.
+**The Highlighter Rule.** Page titles (h1 only) get the marker stroke: a yellow band from 53% to 90% of the line height, angled 176deg, with uneven rounded ends (0.25em 0.6em 0.35em 0.5em), 0.18em padding and -0.1em margin, cloned on every wrapped line. Section titles (h2) get a softer lavender stroke (marker-2, 61% to 92%, angled 177deg, 0.2em padding); body text never gets either.
 
 **The Mono-Is-Time Rule.** Monospace appears only for stamped times (the stamp and the record's when column).
 

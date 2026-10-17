@@ -39,12 +39,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 CSS = """
 :root{
   --desk:#e7ebf1; --card:#fdfdfb; --rule:#d6e1ef; --lines:#e8eef6; --margin:#e3897d; --ink:#1b2130; --ink-2:#4d5566;
-  --stamp:#4b3a8f; --stamp-soft:#ece8f7; --marker:#ffe27a; --red:#b5361f; --red-soft:#fbeae6; --line:#c9d2de;
+  --stamp:#4b3a8f; --stamp-soft:#ece8f7; --marker:#ffe27a; --marker-2:#e6defc; --red:#b5361f; --red-soft:#fbeae6; --line:#c9d2de;
   --shadow:0 1px 2px rgba(27,33,48,.06),0 8px 24px -12px rgba(27,33,48,.22);
 }
 :root[data-theme="dark"]{
   --desk:#10131a; --card:#191d27; --rule:#262c3a; --lines:#1f2430; --margin:#7a3b33; --ink:#eef1f6; --ink-2:#a9b1c1;
-  --stamp:#b9a8f2; --stamp-soft:#272240; --marker:rgba(232,180,40,.42); --red:#ff8a73; --red-soft:#3a1d18; --line:#323a4b;
+  --stamp:#b9a8f2; --stamp-soft:#272240; --marker:rgba(232,180,40,.42); --marker-2:rgba(150,125,240,.30); --red:#ff8a73; --red-soft:#3a1d18; --line:#323a4b;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -14px rgba(0,0,0,.7);
 }
 .top nav .theme{display:inline-flex;align-items:center;gap:6px}
@@ -70,6 +70,7 @@ main{max-width:var(--w,600px);margin:0 auto 56px;padding:0 20px}
 h1{font-size:1.625rem;line-height:28px;letter-spacing:-.02em;margin:0 0 26.5px;padding:0;font-weight:700;
   text-wrap:balance;overflow-wrap:anywhere}
 h1 .mark{padding:0 .18em;margin:0 -.1em;border-radius:.25em .6em .35em .5em;-webkit-box-decoration-break:clone;box-decoration-break:clone;background:linear-gradient(176deg,transparent 52%,var(--marker) 53%,var(--marker) 90%,transparent 91%)}
+h2 .mark{padding:0 .2em;margin:0 -.12em;border-radius:.3em .55em .3em .5em;-webkit-box-decoration-break:clone;box-decoration-break:clone;background:linear-gradient(177deg,transparent 60%,var(--marker-2) 61%,var(--marker-2) 92%,transparent 93%)}
 h2{font-size:1.25rem;line-height:28px;letter-spacing:-.01em;margin:28px 0 0;font-weight:700}
 .card > h2:first-child{margin-top:0}
 p{margin:0 0 10px}
@@ -340,7 +341,7 @@ def vault_page(v: dict) -> str:
         trash = f'<ul class="rows">{"".join(trash_rows)}</ul>{purge}'
     else:
         trash = '<p class="empty">The trash is empty.</p>'
-    body = head + f'<section class="card"><h2>Record</h2>{record}<h2>Trash</h2>{trash}</section>'
+    body = head + f'<section class="card"><h2><span class="mark">Record</span></h2>{record}<h2><span class="mark">Trash</span></h2>{trash}</section>'
     return page(v["name"], body, nav=f'<a href="{esc(v.get("center_link", "/"))}">All vaults</a>')
 
 
@@ -407,7 +408,7 @@ def center_home(d: dict) -> str:
                          f'{esc(", ".join(a["vaults"]) or "no vaults")} · {"may change files" if a["change"] else "read only"}'
                          f'</div></div><form method="post" action="/apps/{quote(a["id"])}/disconnect">{_csrf(d["csrf"])}'
                          f'<button class="btn small plain" type="submit">Disconnect</button></form></li>')
-        apps = ('<section class="card"><h2>Connected AI apps</h2>'
+        apps = ('<section class="card"><h2><span class="mark">Connected AI apps</span></h2>'
                 + (f'<ul class="rows">{"".join(items)}</ul>' if items else
                    '<p class="empty">None yet. Add this server to your AI app as a connector to begin.</p>')
                 + "</section>")
@@ -437,9 +438,9 @@ def settings(d: dict) -> str:
                         for n in (5, 10, 15, 30, 60))
     mode_opts = "".join(f'<option value="{m}">{t}</option>' for m, t in MODES)
     body = (f'<section class="card">{_msg(d["error"])}{_msg(d["note"], ok=True)}<h1><span class="mark">Settings</span></h1>'
-            '<h2>Vaults</h2>'
+            '<h2><span class="mark">Vaults</span></h2>'
             + (f'<ul class="rows">{"".join(rows)}</ul>' if rows else '<p class="empty">No vaults yet.</p>')
-            + f'<h2>Add a vault</h2><form method="post" action="/settings">{_csrf(d["csrf"])}'
+            + f'<h2><span class="mark">Add a vault</span></h2><form method="post" action="/settings">{_csrf(d["csrf"])}'
             '<input type="hidden" name="kind" value="add">'
             '<label for="vn">Name</label><input id="vn" type="text" name="name" required maxlength="60" placeholder="Taxes">'
             '<label for="vp">Vault folder</label><input id="vp" type="text" name="path" required '
@@ -447,7 +448,7 @@ def settings(d: dict) -> str:
             '<p class="note" style="margin-top:6px">The folder that holds vault.cryptomator. Nothing is copied or moved.</p>'
             f'<label for="vm">The AI may</label><select id="vm" name="mode">{mode_opts}</select>'
             '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form>'
-            f'<h2>Auto-lock</h2><form method="post" action="/settings">{_csrf(d["csrf"])}'
+            f'<h2><span class="mark">Auto-lock</span></h2><form method="post" action="/settings">{_csrf(d["csrf"])}'
             '<input type="hidden" name="kind" value="idle">'
             '<label for="idle" style="margin-top:0">Lock a vault after this long without use</label>'
             f'<div class="inline"><select id="idle" name="idle">{idle_opts}</select>'
