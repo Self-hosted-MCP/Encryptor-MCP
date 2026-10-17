@@ -101,3 +101,26 @@ def test_hidden_vault_cant_be_unlocked(tmp_path):
         return await s.call_tool("unlock", {"vault": "Secret", "purpose": "x"})
     res = run(tmp_path, steps, unlock_way="link", with_elicitation=False)
     assert res.is_error and "No vault called" in text(res)
+
+
+def test_unlock_falls_back_when_the_app_cant_open_the_page(tmp_path):
+    """Some apps say they can open pages, then fail to: the user still gets the link instead of an error."""
+    env = {**os.environ, "ENCRYPTOR_CONFIG_DIR": str(tmp_path), "ENCRYPTOR_UNLOCK": "page",
+           "ENCRYPTOR_VAULTS": f"GCM={FIXTURES / 'vault-SIV_GCM'}"}
+
+    async def broken(ctx, params):
+        raise RuntimeError("this transport context has no back-channel for server-initiated requests")
+
+    async def main():
+        params = StdioServerParameters(command=sys.executable, args=["-m", "encryptor_mcp", "stdio"], env=env)
+        async with stdio_client(params) as (r, w):
+            async with ClientSession(r, w, elicitation_callback=broken) as s:
+                await s.initialize()
+                res = await s.call_tool("unlock", {"vault": "GCM", "purpose": "t"})
+                url = text(res).split(": ", 1)[1].split("\n")[0]
+                post_password(url, "test-password-SIV_GCM", delay=0)
+                await asyncio.sleep(1.5)
+                return res, text(await s.call_tool("vaults", {}))
+    res, status = asyncio.run(asyncio.wait_for(main(), 120))
+    assert not res.is_error and "/unlock/" in text(res)
+    assert "GCM: OPEN" in status
