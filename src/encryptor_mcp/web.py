@@ -375,13 +375,15 @@ class Site:
             return 410, {}, pages.message("Link expired", "This unlock link has expired or was already used. "
                                           "Ask your AI app to unlock the vault again.", center=self.center is not None)
         if method == "GET":
-            return 200, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, idle_minutes=int(m.idle // 60))
+            return 200, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, idle_minutes=int(m.idle // 60),
+                                              center=self.center is not None)
         try:
             s = m.unlock(code, form.get("password", ""), form.get("keep", "lock"), form.get("read_only") == "yes")
         except UnlockRefused as exc:
             time.sleep(1)   # slows down guessing
             return 401, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, str(exc),
-                                              idle_minutes=int(m.idle // 60))
+                                              idle_minutes=int(m.idle // 60),
+                                              center=self.center is not None)
         return 303, {"Location": f"/vault/{s.status_code}"}, ""
 
 

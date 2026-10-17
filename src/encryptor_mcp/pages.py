@@ -174,7 +174,7 @@ summary{cursor:pointer;font-weight:600;color:var(--red);width:max-content;max-wi
   .actions .btn{flex:1 1 auto}
   .rows li{flex-wrap:wrap}
   .rows .main{flex:1 1 170px}
-  .rows .acts{margin-left:auto;padding-bottom:20px;flex-wrap:wrap;justify-content:flex-end;row-gap:10px}
+  .rows .acts{flex:1 1 100%;padding-bottom:20px;flex-wrap:wrap;justify-content:flex-end;row-gap:10px}
   .inline{flex-wrap:wrap}
   .record,.record tbody,.record tr,.record td{display:block;width:auto}
   .record tr{position:relative;box-shadow:inset 0 -1px 0 var(--rule)}
@@ -257,7 +257,8 @@ def _csrf(token: str) -> str:
 
 # ---------------------------------------------------------------- unlocking
 
-def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", idle_minutes: int = 10) -> str:
+def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", idle_minutes: int = 10,
+                center: bool = False) -> str:
     keep = "".join(f'<label><input type="radio" name="keep" value="{v}"{" checked" if v == "lock" else ""}>'
                    f'<span>{esc(t)}</span></label>' for v, t in KEEP_LABELS)
     by_person = app.startswith("You")
@@ -273,10 +274,11 @@ def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", 
             '<label class="check"><input type="checkbox" name="read_only" value="yes">'
             '<span>Read only: the AI can look, not change</span></label>'
             f'<div class="actions"><button class="btn wide" type="submit">{ICONS["open"]}Unlock</button></div></form>'
-            f'<p class="note">The password stays here; the AI never sees it. Without use, the vault locks itself after '
+            + ('<p class="note" style="text-align:center"><a class="link" href="/">Cancel</a></p>' if center else "")
+            + f'<p class="note">The password stays here; the AI never sees it. Without use, the vault locks itself after '
             f'{idle_minutes} minutes.'
             + ("" if by_person else " Only continue if you asked your AI app for this just now.") + '</p></section>')
-    return page(f"Unlock {vault}", body)
+    return page(f"Unlock {vault}", body, nav='<a href="/">All vaults</a>' if center else "")
 
 
 # ---------------------------------------------------------------- one open vault
