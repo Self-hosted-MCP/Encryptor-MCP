@@ -371,6 +371,8 @@ class Site:
             return 200, {}, pages.about({**c.view(), "csrf": sess["csrf"], "note": note, "error": error})
         if head == "settings" and len(parts) == 3 and parts[1] == "vault":
             return self.vault_settings(method, unquote(parts[2]), form, sess, headers)
+        if head == "settings" and method == "POST" and form.get("kind") == "create":
+            return self.create_vault(form, sess, headers)
         if head == "settings":
             note, error = "", ""
             if method == "POST":
@@ -389,9 +391,11 @@ class Site:
             "devices": c.sessions.devices(token), "log": list(reversed(c.sessions.log[-20:])),
             "mcp_url": f"{self.base}/mcp" if c.hosted else ""})
 
-    def vault_settings(self, method: str, name: str, form: dict, sess: dict, headers: dict):
+    def vault_settings(self, method: str, name: str, form: dict, sess: dict, headers: dict,
+                       note: str = "", error: str = ""):
         c, m = self.center, self.manager
-        note, error = "", ""
+        if method == "POST" and form.get("kind") in ("password", "show_key", "reset"):
+            return self.vault_keys(name, form, sess)
         if method == "POST":
             kind = form.get("kind", "")
             if kind in ("rename", "path", "remove") and form.get("confirm") != "yes":
@@ -425,6 +429,73 @@ class Site:
             "vault": row, "csrf": sess["csrf"], "note": note, "error": error, "open": s is not None,
             "app": s.app if s else "", "status_code": s.status_code if s else "", "format": fmt,
             "idle_all": int(m.idle // 60), "setup_file": c.view().get("setup_file", "")})
+
+    def create_vault(self, form: dict, sess: dict, headers: dict):
+        from .vault import manage
+        c = self.center
+        name = (form.get("name") or "").strip()
+        where = Path((form.get("where") or "").strip()).expanduser()
+        try:
+            if not name or any(ch in name for ch in ";=,/\\") or len(name) > 60:
+                raise keys.VaultError("Give the vault a short name without ; = , or slashes.")
+            if any(v["name"].casefold() == name.casefold() for v in c.view()["vaults"]):
+                raise keys.VaultError(f"There's already a vault called {name!r}.")
+            if not where.is_dir():
+                raise keys.VaultError("That place doesn't exist. Choose a folder that's already there.")
+            manage.check_new_password(form.get("new", ""), form.get("again", ""))
+            key = manage.create_vault(where / name, form.get("new", ""))
+            try:
+                words = manage.recovery_key(key)
+            finally:
+                key.wipe()
+            c.save("add", {"name": name, "path": str(where / name), "mode": form.get("mode", "full")})
+        except (keys.VaultError, ValueError) as exc:
+            return 400, {}, self.settings_page(sess, headers, "", str(exc))
+        self.manager._event(name, "vault created on the control center")
+        return 200, {}, pages.recovery_page({"vault": name, "key": words, "back": "/", "csrf": sess["csrf"],
+                                             "note": f"{name} is ready, in {pages.home(str(where / name))}."})
+
+    def vault_keys(self, name: str, form: dict, sess: dict):
+        """Password change, showing the recovery key, and resetting a forgotten password: the person only, on this
+        page; wrong passwords count towards the same pause as unlocking."""
+        from .vault import manage
+        c, m = self.center, self.manager
+        row = next((v for v in c.view()["vaults"] if v["name"].casefold() == name.casefold()), None)
+        if row is None:
+            return 404, {}, pages.message("Not found", f"No vault called {name!r}.", center=True)
+        kind, folder = form.get("kind"), Path(row["path"])
+        back = f"/settings/vault/{quote(row['name'])}"
+        wait = m.locked_out(row["name"])
+        if wait:
+            return 429, {}, pages.message("Paused", f"Too many wrong tries. Try again in {int(wait // 60) + 1} minutes.",
+                                          center=True)
+        try:
+            if kind == "password":
+                manage.check_new_password(form.get("new", ""), form.get("again", ""))
+                manage.change_password(folder, form.get("old", ""), form.get("new", ""))
+                m._event(row["name"], "password changed on the control center")
+                note = "Password changed. Use the new one from now on, in Cryptomator too."
+                return 200, {}, self.vault_settings("GET", row["name"], {}, sess, {}, note)[2]
+            if kind == "show_key":
+                key = keys.unlock_masterkey((folder / "masterkey.cryptomator").read_bytes(), form.get("old", ""))
+                try:
+                    words = manage.recovery_key(key)
+                finally:
+                    key.wipe()
+                m._event(row["name"], "recovery key shown on the control center")
+                return 200, {}, pages.recovery_page({"vault": row["name"], "key": words, "back": back, "csrf": sess["csrf"]})
+            manage.check_new_password(form.get("new", ""), form.get("again", ""))
+            manage.reset_password(folder, form.get("recovery", ""), form.get("new", ""))
+            m._event(row["name"], "password reset with the recovery key on the control center")
+            note = "New password set with the recovery key."
+            return 200, {}, self.vault_settings("GET", row["name"], {}, sess, {}, note)[2]
+        except keys.WrongPassword:
+            m.failures.setdefault(row["name"], []).append(m.clock())
+            time.sleep(1)
+            error = "Wrong password."
+        except keys.VaultError as exc:
+            error = str(exc)
+        return 400, {}, self.vault_settings("GET", row["name"], {}, sess, {}, "", error)[2]
 
     def double_check(self, kind: str, name: str, form: dict, sess: dict) -> str | None:
         """The confirmation page for a critical change to a vault (rename, move, remove), or None if it can't

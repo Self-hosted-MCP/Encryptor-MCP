@@ -6,6 +6,8 @@
 //   java -cp ... RefVault.java dump <vaultDir> <password>          (one line per entry: type, path, size, sha256)
 //   java -cp ... RefVault.java write <vaultDir> <password> <path> <text>
 //   java -cp ... RefVault.java health <vaultDir> <password>          (Cryptomator's own health check: one line per problem)
+//   java -cp ... RefVault.java recoverykey <vaultDir> <password>     (needs Cryptomator.app's own jar)
+//   java -cp ... RefVault.java resetpw <vaultDir> <recoveryKey> <newPassword>
 import org.cryptomator.cryptofs.CryptoFileSystemProperties;
 import org.cryptomator.cryptofs.CryptoFileSystemProvider;
 import org.cryptomator.cryptolib.api.CryptorProvider;
@@ -38,6 +40,17 @@ public class RefVault {
     // Arguments may come as "b64:<base64 of UTF-8>", so names outside the system code page (Windows) arrive intact.
     static String arg(String a) {
         return a.startsWith("b64:") ? new String(java.util.Base64.getDecoder().decode(a.substring(4)), StandardCharsets.UTF_8) : a;
+    }
+
+    static Class<?> recoveryFactory() throws Exception {
+        return Class.forName("org.cryptomator.ui.recoverykey.RecoveryKeyFactory");
+    }
+
+    static Object factory() throws Exception {
+        var enc = Class.forName("org.cryptomator.ui.recoverykey.WordEncoder").getDeclaredConstructor();
+        enc.setAccessible(true);
+        var ctor = recoveryFactory().getConstructors()[0];
+        return ctor.newInstance(enc.newInstance(), new MasterkeyFileAccess(new byte[0], RNG));
     }
 
     public static void main(String[] raw) throws Exception {
@@ -111,7 +124,21 @@ public class RefVault {
                     });
                 }
             }
-            default -> throw new IllegalArgumentException("make | dump | write | health");
+            case "recoverykey" -> {
+                // Cryptomator's own recovery key for a vault (its desktop app's RecoveryKeyFactory)
+                System.out.println("key\t" + recoveryFactory().getMethod("createRecoveryKey", Path.class, CharSequence.class)
+                        .invoke(factory(), vault, args[2]));
+            }
+            case "resetpw" -> {
+                // Cryptomator's own "reset password with the recovery key"
+                Object f = factory();
+                boolean ok = (boolean) recoveryFactory().getMethod("validateRecoveryKey", String.class).invoke(f, args[2]);
+                if (!ok) throw new IllegalArgumentException("Cryptomator says: not a valid recovery key");
+                recoveryFactory().getMethod("newMasterkeyFileWithPassphrase", Path.class, String.class, CharSequence.class)
+                        .invoke(f, vault, args[2], args[3]);
+                System.out.println("reset\tok");
+            }
+            default -> throw new IllegalArgumentException("make | dump | write | health | recoverykey | resetpw");
         }
     }
 }

@@ -1,0 +1,15 @@
+Encryptor MCP
+Copyright (C) 2026 s17sh70x2jfl031ag and Encryptor-MCP contributors.
+Licensed under the GNU Affero General Public License v3.0 only (see LICENSE).
+
+Works with Cryptomator vaults. Not made by or affiliated with Cryptomator or Skymatic GmbH.
+Cryptomator is a trademark of Skymatic GmbH.
+
+This product includes:
+
+- src/encryptor_mcp/vault/words_en.txt: the 4096-word list Cryptomator uses for recovery keys, from the Cryptomator
+  desktop app (https://github.com/cryptomator/cryptomator), licensed GPL-3.0. Included so that recovery keys are
+  the same in Encryptor MCP and in Cryptomator.
+
+The tests check compatibility with Cryptomator's own libraries (cryptofs, cryptolib, AGPL-3.0), which they fetch from
+Maven Central or read from an installed Cryptomator.app; those libraries are not part of this package.

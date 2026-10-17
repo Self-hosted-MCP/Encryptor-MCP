@@ -48,7 +48,14 @@ def official(*args: str) -> list[str]:
     out = subprocess.run([j, "-cp", f"{CRYPTOMATOR_MODS}/*", str(ROOT / "java" / "RefVault.java"), *safe],
                          capture_output=True, text=True, encoding="utf-8", timeout=120)
     assert out.returncode == 0, out.stderr[-2000:]
-    return sorted(line for line in out.stdout.splitlines() if line.split("\t")[0] in ("dir", "file", "link", "problem"))
+    return sorted(line for line in out.stdout.splitlines()
+                  if line.split("\t")[0] in ("dir", "file", "link", "problem", "key", "reset"))
+
+
+def needs_cryptomator_app():
+    """Recovery keys are made by Cryptomator's desktop app code, which isn't on Maven Central: skip without it."""
+    if not list(CRYPTOMATOR_MODS.glob("cryptomator-*.jar")):
+        pytest.skip("needs Cryptomator.app's own jar for its recovery key code")
 
 
 @pytest.fixture(params=MODES)

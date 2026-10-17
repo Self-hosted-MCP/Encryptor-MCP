@@ -11,7 +11,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 from starlette.testclient import TestClient
 
-from conftest import FIXTURES
+from conftest import FIXTURES, official
 from encryptor_mcp import server, unlock as U
 
 PW = "test-password-SIV_GCM"
@@ -437,3 +437,35 @@ def test_sign_in_by_unlocking_a_vault(local, monkeypatch):
     client.cookies.set("encryptor_center", r.headers["set-cookie"].split(";")[0].split("=", 1)[1])
     assert "Your vaults" in client.get("/").text and server.manager().status("GCM")
     assert "vault password" in client.get("/activity").text
+
+
+def test_create_vault_password_and_recovery_on_the_page(local, tmp_path):
+    client, lp, _ = local
+    csrf = signed_in(client, lp)
+    o = {"origin": lp.base}
+    where = tmp_path / "Synced"
+    where.mkdir()
+    form = {"csrf": csrf, "kind": "create", "name": "Private", "where": str(where), "new": "first pass 1",
+            "again": "first pass 2"}
+    assert "don&#x27;t match" in client.post("/settings", data=form, headers=o).text
+    r = client.post("/settings", data={**form, "again": "first pass 1"}, headers=o)
+    assert "Recovery key for Private" in r.text and "Private is ready" in r.text
+    words = re.findall(r'<li><span class="n">\d+</span>([a-z]+)</li>', r.text)
+    assert len(words) == 44 and "Private: locked" in server.vaults()
+    assert official("dump", str(where / "Private"), "first pass 1") == []          # Cryptomator opens it
+    base = "/settings/vault/Private"
+    r = client.post(base, data={"csrf": csrf, "kind": "password", "old": "nope nope", "new": "second pass",
+                                "again": "second pass"}, headers=o)
+    assert r.status_code == 400 and "Wrong password" in r.text
+    r = client.post(base, data={"csrf": csrf, "kind": "password", "old": "first pass 1", "new": "second pass",
+                                "again": "second pass"}, headers=o)
+    assert "Password changed" in r.text
+    r = client.post(base, data={"csrf": csrf, "kind": "show_key", "old": "second pass"}, headers=o)
+    assert re.findall(r'<li><span class="n">\d+</span>([a-z]+)</li>', r.text) == words   # same key, same words
+    r = client.post(base, data={"csrf": csrf, "kind": "reset", "recovery": " ".join(words), "new": "third pass",
+                                "again": "third pass"}, headers=o)
+    assert "New password set with the recovery key" in r.text
+    m = server.manager()
+    assert m.unlock(m.request_unlock("Private"), "third pass")
+    tools = {t.name for t in asyncio.run(server.mcp.list_tools())}
+    assert not tools & {"create_vault", "change_password", "show_recovery_key", "reset_password"}   # never via the AI

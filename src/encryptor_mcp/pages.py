@@ -169,6 +169,10 @@ svg.kind{width:20px;height:20px;flex:none;color:var(--ink-2)}
 .record .undone .act{text-decoration:line-through;color:var(--ink-2)}
 .record td:last-child{padding-right:0;text-align:right}
 .empty{color:var(--ink-2);margin:0;line-height:28px}
+.words{list-style:none;margin:14px 0 28px;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:0 18px;
+  font:500 1rem/28px ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.words .n{display:inline-block;width:2.2em;color:var(--ink-2);font-size:.8125rem}
+@media (max-width:560px){.words{grid-template-columns:repeat(2,1fr)}}
 details{margin-top:12px}
 summary{cursor:pointer;font-weight:600;color:var(--red);width:max-content;max-width:100%}
 .crumbs{color:var(--ink-2);margin:0;line-height:28px;overflow-wrap:anywhere}
@@ -550,6 +554,17 @@ def settings(d: dict) -> str:
             '<p class="note" style="margin-top:0">The folder that holds vault.cryptomator. Nothing is copied or moved.</p>'
             f'<label for="vm">The AI may</label><select id="vm" name="mode">{mode_opts}</select>'
             '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form></section>'
+            f'<section class="card" id="create"><h2><span class="mark">Create a new vault</span></h2>'
+            f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="create">'
+            '<label for="cn" style="margin-top:0">Name</label>'
+            '<input id="cn" type="text" name="name" required maxlength="60" placeholder="Private">'
+            '<label for="cw">Where</label><input id="cw" type="text" name="where" required '
+            f'placeholder="{"/data/vaults" if d["hosted"] else "~/Nextcloud"}">'
+            '<p class="note" style="margin-top:0">A folder named after the vault is made there. Put it in a synced folder '
+            'to have it on your other devices.</p>'
+            + _new_password_fields("c")
+            + f'<label for="cm">The AI may</label><select id="cm" name="mode">{mode_opts}</select>'
+            '<div class="actions"><button class="btn" type="submit">Create vault</button></div></form></section>'
             f'<section class="card"><h2><span class="mark">Auto-lock</span></h2>{idle}</section>'
             f'<section class="card" id="safety"><h2><span class="mark">Safety</span></h2>{safety}</section>'
             f'{connect}')
@@ -675,6 +690,28 @@ def vault_settings(d: dict) -> str:
             f'<label for="vi" style="margin-top:0">Lock it after this long without use</label>'
             f'<div class="inline"><select id="vi" name="idle">{idle_opts}</select>'
             '<button class="btn plain" type="submit">Save</button></div></form></section>'
+            f'<section class="card" id="password"><h2><span class="mark">Password</span></h2>'
+            f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="password">'
+            '<label for="op" style="margin-top:0">Current password</label>'
+            '<input id="op" type="password" name="old" autocomplete="current-password" required>'
+            + _new_password_fields("p")
+            + '<div class="actions"><button class="btn plain" type="submit">Change password</button></div></form>'
+            '<p class="note">Cryptomator and your other devices use the new password right away. The vault\'s files '
+            'aren\'t re-encrypted, so it\'s quick.</p></section>'
+            f'<section class="card" id="recovery"><h2><span class="mark">Recovery key</span></h2>'
+            f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="show_key">'
+            '<label for="kp" style="margin-top:0">Password, to show the recovery key</label>'
+            '<div class="inline"><input id="kp" type="password" name="old" autocomplete="current-password" required>'
+            '<button class="btn small plain" type="submit">Show</button></div></form>'
+            '<details style="margin-top:28px"><summary style="color:var(--ink)">Forgot the password?</summary>'
+            f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="reset">'
+            '<label for="rk">Recovery key (44 words)</label>'
+            '<textarea id="rk" name="recovery" rows="3" required autocomplete="off" spellcheck="false" '
+            'style="width:100%;font:inherit;background:transparent;color:var(--ink);border:1.5px solid var(--ink-2);'
+            'border-radius:4px;padding:8px"></textarea>'
+            + _new_password_fields("r")
+            + '<div class="actions"><button class="btn plain" type="submit">Set the new password</button></div>'
+            '</form></details></section>'
             f'<section class="card"><h2><span class="mark">Name and folder</span></h2>{place}</section>'
             f'<section class="card"><h2><span class="mark">Remove</span></h2>{remove}</section>')
     return page(f"{v['name']} settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
@@ -693,6 +730,30 @@ def confirm_change(d: dict) -> str:
             f'<div class="actions"><button class="btn" type="submit">{esc(d["button"])}</button>'
             f'<a class="btn plain" href="{esc(d.get("back") or d["action"])}">Cancel</a></div></form></section>')
     return page(d["title"], body, nav=center_nav(d["csrf"], "/settings") if d["csrf"] else "")
+
+
+def _new_password_fields(prefix: str = "") -> str:
+    return (f'<label for="{prefix}np1">New password</label>'
+            f'<input id="{prefix}np1" type="password" name="new" autocomplete="new-password" minlength="8" required>'
+            f'<label for="{prefix}np2">New password again</label>'
+            f'<input id="{prefix}np2" type="password" name="again" autocomplete="new-password" minlength="8" required>'
+            '<p class="note" style="margin-top:0">At least 8 characters. Longer is stronger: a short sentence works well.</p>')
+
+
+def recovery_page(d: dict) -> str:
+    """The recovery key, shown once: 44 words, numbered, with what it's for."""
+    words = d["key"].split()
+    cells = "".join(f'<li><span class="n">{i}</span>{esc(w)}</li>' for i, w in enumerate(words, 1))
+    body = ('<section class="card">'
+            f'<h1><span class="mark">Recovery key for {esc(d["vault"])}</span></h1>'
+            + _msg(d.get("note", ""), ok=True)
+            + '<p>If you ever forget the password, these 44 words open the vault and let you choose a new one. '
+              'They work in Cryptomator too.</p>'
+            f'<ol class="words">{cells}</ol>'
+            '<p class="msg err">Write them down or keep them in a password manager. Anyone with these words can open '
+            'the vault. They aren\'t stored anywhere, and your AI apps never see them.</p>'
+            f'<div class="actions"><a class="btn" href="{esc(d["back"])}">I\'ve saved them</a></div></section>')
+    return page("Recovery key", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
 
 
 def signin(hosted: bool, error: str = "", vaults: list[str] | None = None) -> str:
