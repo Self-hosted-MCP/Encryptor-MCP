@@ -1,0 +1,82 @@
+{
+  "manifest_version": "0.4",
+  "name": "encryptor-mcp",
+  "display_name": "Encryptor MCP",
+  "version": "0.0.0",
+  "description": "Open Cryptomator vaults from Claude: read and write files with the vault's own keys. You unlock vaults yourself on a page in your browser, the password never goes through the chat. Every change can be undone.",
+  "long_description": "Open your Cryptomator vaults from Claude Desktop. Claude reads and writes files with the vault's own keys, so they stay encrypted on disk and work in Cryptomator as before.\n\n**You unlock vaults yourself:** when Claude needs a locked vault, a page opens in your browser and you type the password there (on a Mac, a password box can show instead). The password never goes through the chat, and you choose how long the vault stays open. Keys are kept only in memory.\n\nEvery change can be undone. Deleting for good only happens when you empty the trash and approve it yourself.\n\nWorks with Cryptomator vaults. Not made by or affiliated with Cryptomator.",
+  "author": {
+    "name": "s17sh70x2jfl031ag",
+    "url": "https://github.com/s17sh70x2jfl031ag"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP.git"
+  },
+  "homepage": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP",
+  "support": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/encryptor_mcp/__main__.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "--frozen", "--no-dev", "--quiet", "encryptor-mcp", "stdio"],
+      "env": {
+        "ENCRYPTOR_VAULTS": "${user_config.vaults}",
+        "ENCRYPTOR_IDLE_MINUTES": "${user_config.idle_minutes}"
+      }
+    }
+  },
+  "tools": [
+    {"name": "vaults", "description": "Lists your vaults: open or locked, read only or not, and when an open one locks"},
+    {"name": "unlock", "description": "Asks you to open a locked vault; you type the password on a page, never in the chat"},
+    {"name": "lock", "description": "Locks a vault now, or every open vault, and wipes its keys from memory"},
+    {"name": "control_center", "description": "Opens the control center in your browser: vaults, changes, trash and settings"},
+    {"name": "list_folder", "description": "Lists a folder in an open vault: names, kinds and sizes"},
+    {"name": "read_file", "description": "Reads a text file from an open vault"},
+    {"name": "file_info", "description": "Shows a file or folder's kind, size, last change and where it's stored encrypted"},
+    {"name": "find", "description": "Finds files and folders whose name contains some text"},
+    {"name": "health_check", "description": "Checks that an open vault's structure is whole, like Cryptomator's own check"},
+    {"name": "locate", "description": "Shows where a file or folder is stored encrypted on disk"},
+    {"name": "decrypt_name", "description": "Gives the real path of an encrypted path inside a vault"},
+    {"name": "write_file", "description": "Creates or replaces a text file; the old contents are kept"},
+    {"name": "append_file", "description": "Adds text to the end of a text file"},
+    {"name": "make_folder", "description": "Creates a folder"},
+    {"name": "move", "description": "Moves or renames a file or folder within one vault, never overwriting"},
+    {"name": "copy_file", "description": "Copies a file within a vault, encrypted the whole time"},
+    {"name": "trash", "description": "Puts a file or folder in the vault's trash, where undo can take it back"},
+    {"name": "trash_list", "description": "Lists what's in the vault's trash"},
+    {"name": "empty_trash", "description": "Deletes from the trash for good, after you approve it yourself"},
+    {"name": "recent_changes", "description": "Lists the latest changes: when, which app, why, and if undone"},
+    {"name": "undo", "description": "Undoes a change, unless the file changed since"},
+    {"name": "versions", "description": "Lists earlier versions of a file"},
+    {"name": "restore_version", "description": "Puts back an earlier version of a file; the current one is kept too"}
+  ],
+  "tools_generated": false,
+  "keywords": ["cryptomator", "encryption", "vault", "files", "privacy"],
+  "license": "AGPL-3.0-only",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  },
+  "user_config": {
+    "vaults": {
+      "type": "string",
+      "title": "Vaults (optional)",
+      "description": "Name=/path/to/vault;Other=/path/to/other. You can leave this empty and add vaults on the control center instead. No passwords here: you type those only on the unlock page.",
+      "required": false,
+      "default": ""
+    },
+    "idle_minutes": {
+      "type": "number",
+      "title": "Lock after minutes without use",
+      "description": "An open vault locks by itself after this many minutes without use.",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 720
+    }
+  }
+}
