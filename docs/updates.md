@@ -93,6 +93,27 @@ Run `crontab -e`, then add:
 
 If Railway or Render builds from your fork of this repository, the fork can follow official releases by itself: in your fork, turn on Actions, then add the repository variable `AUTO_UPDATE` = `on` (**Settings → Secrets and variables → Actions → Variables**). Every Monday, [the workflow](../.github/workflows/update-from-releases.yml) merges the newest release into your fork, and your host rebuilds. It never runs in the original repository, and it stops without changing anything if the release conflicts with your own changes.
 
+## Keeping Python up to date
+
+Encryptor runs on Python, the language it's written in. Updating Encryptor doesn't update Python, and that's fine: Encryptor works on Python 3.11 and newer, and its tests run on 3.11 and 3.14 for every change.
+
+- **Docker, Railway, Render:** nothing to do. Python comes inside the image, and each Encryptor release is built on the newest Python 3.14.
+- **On your computer, installed with uv:** uv chose a Python when you installed Encryptor. Now and then (for example every few months), get its newest fixes:
+
+  ```bash
+  uv python upgrade
+  ```
+
+  This installs the newest patch of each Python uv manages (like 3.14.1 to 3.14.2), and Encryptor uses it from then on. Restart your AI app afterwards. If uv uses a Python you installed yourself (from Homebrew or python.org), update that one the way you installed it.
+
+- **Moving to a new Python version** (like 3.14 to 3.15), once Encryptor supports it:
+
+  ```bash
+  uv tool upgrade encryptor-mcp --python 3.15
+  ```
+
+`encryptor-mcp version` shows Encryptor's version. `uv python list --only-installed` shows the Pythons uv keeps for you.
+
 ## Staying on one version
 
 Install a version tag instead of the newest release:
