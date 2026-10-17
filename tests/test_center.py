@@ -164,7 +164,7 @@ def test_setup_file_vaults_are_editable_on_the_page(local, monkeypatch):
     m = server.manager()
     assert m.unlock(m.request_unlock("Main"), "test-password-SIV_CTRMAC")   # now the CTR vault
     r = client.post("/settings/vault/Main", data={"csrf": csrf, "kind": "remove", "confirm": "yes"}, headers=o)
-    assert "Removed Main" in r.text and server.vaults().startswith("No vaults yet")
+    assert "Removed Main" in r.text and "Your vaults" in r.text and server.vaults().startswith("No vaults yet")
     assert not server.ENV_FILE.exists() or "Main" not in server.ENV_FILE.read_text()
 
 
@@ -310,7 +310,7 @@ def test_per_vault_settings_page(local):
     r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove"}, headers=o)
     assert r.status_code == 400 and "Tick the box" in r.text
     r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove", "confirm": "yes"}, headers=o)
-    assert "Removed Spare" in r.text and "Spare" not in server.vaults()
+    assert "Removed Spare" in r.text and "Your vaults" in r.text and "Spare" not in server.vaults()
     assert client.get("/settings/vault/Nope").status_code == 404
 
 

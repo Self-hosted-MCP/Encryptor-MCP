@@ -268,7 +268,7 @@ class Site:
         if method == "POST" and not hmac.compare_digest(form.get("csrf", ""), sess["csrf"]):
             return 403, {}, pages.message("Not allowed", "This form is out of date. Reload the page and try again.")
         if head == "" and method == "GET":
-            return 200, {}, pages.center_home(self.home_view(sess))
+            return 200, {}, pages.center_home(self.home_view(sess, sess.pop("flash", "")))
         if head == "signout" and method == "POST":
             c.sessions.end(_cookies(headers).get(c.cookie, ""))
             return 303, {"Location": "/", **c.set_cookie("", 0)}, ""
@@ -349,7 +349,8 @@ class Site:
                 if kind == "remove" and not error:
                     if self.mounts:
                         self.mounts.unmount(name)
-                    return 200, {}, self.settings_page(sess, headers, note)
+                    sess["flash"] = note   # shown once on Your vaults
+                    return 303, {"Location": "/"}, ""
         row = next((v for v in c.view()["vaults"] if v["name"].casefold() == name.casefold()), None)
         if row is None:
             return 404, {}, pages.message("Not found", f"No vault called {name!r}.", center=True)
