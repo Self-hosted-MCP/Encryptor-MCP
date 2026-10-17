@@ -204,5 +204,5 @@ On a computer, Encryptor is local only: the unlock page and the control center l
 | Every kind of vault change, by automated tests | Yes (macOS, 180+ tests) |
 | The control center in a browser, desktop and phone width, light and dark | Yes (macOS) |
 | **Show in Finder** with a real Finder mount | Yes (macOS) |
-| Windows and Linux | Earlier automated test runs passed there, but not since the latest changes. Not yet by hand |
+| Windows and Linux | Yes, the automated tests on GitHub (Python 3.11 and 3.14). Not yet by hand |
 | Each AI app in [connect-your-ai.md](connect-your-ai.md) | Not yet: steps follow each app's own docs |
