@@ -48,21 +48,29 @@ CSS = """
   --stamp:#b9a8f2; --stamp-soft:#272240; --marker:rgba(232,180,40,.42); --marker-2:rgba(150,125,240,.30); --red:#ff8a73; --red-soft:#3a1d18; --line:#323a4b;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -14px rgba(0,0,0,.7);
 }
-.top nav .theme{display:inline-flex;align-items:center;gap:6px}
-.top nav .theme svg{width:16px;height:16px}
+.top .themes{margin:0;padding-left:20px;border-left:1.5px solid var(--line);display:flex}
+.top .theme{display:inline-flex;align-items:center;gap:7px;background:none;border:0;padding:4px 0;cursor:pointer;
+  font-family:inherit;font-size:1rem;font-weight:500;line-height:1.4;color:var(--ink-2)}
+.top .theme:hover{color:var(--ink)}
+.top .theme svg{width:18px;height:18px}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;min-height:100vh;background:var(--desk);color:var(--ink);
   font:16px/1.75 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif}
-.top{max-width:var(--w,600px);margin:0 auto;padding:28px 20px 14px;display:flex;align-items:center;gap:10px;
-  justify-content:space-between;flex-wrap:wrap}
+.top{max-width:var(--w,600px);margin:0 auto;padding:28px 20px 14px;display:flex;align-items:center;gap:12px 20px;
+  flex-wrap:wrap}
+.top .brand{margin-right:auto}
 .brand{display:flex;align-items:center;gap:9px;color:var(--ink);text-decoration:none;font-weight:650;letter-spacing:-.01em}
 .brand svg{width:22px;height:22px;color:var(--stamp);align-self:flex-start;margin-top:3px}
 .brand > span{display:flex;flex-direction:column;line-height:1.3}
 .brand small{font-weight:500;font-size:.8125rem;color:var(--ink-2);letter-spacing:0}
-.top nav{display:flex;gap:18px;align-items:center;font-size:.8125rem}
-.top nav a,.top nav button{color:var(--ink-2);text-decoration:none;background:none;border:0;font:inherit;padding:0;cursor:pointer}
-.top nav a:hover,.top nav button:hover,.top nav a[aria-current]{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.top nav{display:flex;gap:22px;align-items:center;font-size:1rem;margin-left:auto;flex-wrap:wrap}
+.top nav:empty{display:none}
+.top nav a,.top nav button{color:var(--ink-2);font-weight:500;text-decoration:none;background:none;border:0;font-size:inherit;
+  font-family:inherit;padding:4px 0;cursor:pointer;opacity:.85}
+.top nav a:hover,.top nav button:hover{color:var(--ink);opacity:1}
+.top nav a[aria-current]{color:var(--stamp);font-weight:650;opacity:1;text-decoration:underline;
+  text-decoration-thickness:2px;text-underline-offset:6px}
 main{max-width:var(--w,600px);margin:0 auto 56px;padding:0 20px}
 .card{position:relative;background-color:var(--card);border-radius:4px;box-shadow:var(--shadow);
   padding:28px 26px 28px 58px;
@@ -173,6 +181,9 @@ summary{cursor:pointer;font-weight:600;color:var(--red);width:max-content;max-wi
     repeating-linear-gradient(180deg,transparent 0,transparent 27px,var(--lines) 27px,var(--lines) 28px)}
   .top,main{padding-left:14px;padding-right:14px}
   .top{padding-top:18px}
+  .top .brand{flex:1 1 0;min-width:0}
+  .top .themes{order:2;border-left:0;padding-left:0;align-self:flex-start}
+  .top nav{order:3;width:100%;margin-left:0;gap:18px}
   .seg{grid-template-columns:repeat(2,1fr)}
   .seg label:nth-of-type(3){border-left:0}
   .seg label:nth-of-type(n+3){border-top:1px solid var(--line)}
@@ -223,7 +234,7 @@ def theme_switch() -> str:
     """A no-script switch between light (the default) and dark, remembered by this browser."""
     dark = THEME.get() == "dark"
     label = "Light" if dark else "Dark"
-    return (f'<form method="post" action="/theme" style="margin:0"><input type="hidden" name="next" value="{esc(HERE.get())}">'
+    return (f'<form method="post" action="/theme" class="themes"><input type="hidden" name="next" value="{esc(HERE.get())}">'
             f'<button type="submit" class="theme" aria-label="Switch to {label.lower()} mode">'
             f'{ICONS["sun" if dark else "moon"]}{label}</button></form>')
 
@@ -236,7 +247,7 @@ def page(title: str, body: str, *, wide: bool = False, nav: str = "") -> str:
             f'<meta name="robots" content="noindex"><meta name="color-scheme" content="{"dark" if dark else "light"}">'
             f'<link rel="icon" href="{FAVICON}">'
             f'<title>{esc(title)} · {NAME}</title><style>{CSS}</style></head><body{width}>{CONTRACT}'
-            f'<header class="top"><span class="brand">{ICONS["tag"]}<span>{NAME}<small>{TAGLINE}</small></span></span><nav>{nav}{theme_switch()}</nav></header>'
+            f'<header class="top"><span class="brand">{ICONS["tag"]}<span>{NAME}<small>{TAGLINE}</small></span></span><nav>{nav}</nav>{theme_switch()}</header>'
             f'<main>{body}</main></body></html>')
 
 
@@ -579,8 +590,9 @@ def activity(d: dict) -> str:
 def about(d: dict) -> str:
     body = (f'{_msg(d.get("error", ""))}{_msg(d.get("note", ""), ok=True)}'
             '<section class="card"><h1><span class="mark">About</span></h1>'
-            '<p>Encryptor MCP lets your AI agents read and write inside your Cryptomator vaults, while the password '
-            'stays with you and every change can be undone.</p>'
+            '<p>Encryptor MCP keeps your private files locked, and lets your AI help with them when you say so.</p>'
+            '<p>You unlock a folder yourself. Then your AI can find, read and update files in it. Your password never '
+            'goes to the AI, everything locks again on its own, and anything the AI changes can be undone.</p>'
             f'{_about_html(d)}</section>')
     return page("About", body, wide=True, nav=center_nav(d["csrf"], "/about"))
 
