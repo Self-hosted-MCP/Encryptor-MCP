@@ -361,7 +361,7 @@ def _reads_html(v: dict) -> str:
         for e in r["entries"])
     intact = r["verdict"].startswith(("Intact", "Nothing"))
     return (f'<section class="card" id="reads"><h2><span class="mark">{esc(_("Read log"))}</span></h2>'
-            f'<p class="msg ok">{esc(_("Private to you. Your AI apps can't see this log."))}</p>'
+            f'''<p class="msg ok">{esc(_("Private to you. Your AI apps can't see this log."))}</p>'''
             + (f'<table class="record">{rows}</table>' if rows else f'<p class="empty">{esc(_("Nothing read yet."))}</p>')
             + f'<p class="{"note" if intact else "msg err"}">{esc(_verdict(r["verdict"]))}</p></section>')
 
@@ -687,7 +687,7 @@ def _about_html(d: dict) -> str:
     if upd.get("newer"):
         upd_line = (f'<p class="msg ok">{esc(_("Version {version} is available.", version=upd["latest"]))} '
                     f'<a class="link" href="{esc(upd.get("url") or "https://github.com/" + d["repo"] + "/releases")}">'
-                    f'{esc(_("What's new"))}</a></p>')
+                    f'''{esc(_("What's new"))}</a></p>''')
     elif upd.get("error"):
         upd_line = f'<p class="meta">{esc(_(upd["error"]) if upd["error"] in UPDATE_ERRORS else upd["error"])}</p>'
     elif upd.get("latest"):
@@ -722,7 +722,7 @@ def activity(d: dict) -> str:
     devices, log = _devices_html(d), _log_html(d)
     body = (f'{_msg(d.get("note", ""), ok=True)}'
             f'<section class="card"><h1><span class="mark">{esc(_("Activity"))}</span></h1>'
-            f'<p class="msg ok">{esc(_("Private to you. Your AI apps can't see this page or these logs."))}</p>'
+            f'''<p class="msg ok">{esc(_("Private to you. Your AI apps can't see this page or these logs."))}</p>'''
             f'<h2 id="devices"><span class="mark">{esc(_("Signed-in browsers"))}</span></h2>{devices}</section>'
             f'<section class="card"><h2><span class="mark">{esc(_("Sign-ins, last 7 days"))}</span></h2>{log}'
             '<p class="note">' + esc(_("Kept on this computer or server only, for 7 days. Passphrases are never "
@@ -765,7 +765,7 @@ def vault_settings(d: dict) -> str:
              f'<label for="np">{esc(_("Vault folder"))}</label><div class="inline">'
              f'<input id="np" type="text" name="path" required value="{esc(home(v["path"]))}">'
              f'<button class="btn small plain" type="submit">{esc(_("Change"))}</button></div></form>'
-             f'<p class="note" style="margin-top:0">{esc(_("Renaming or moving locks the vault if it's open."))}</p>')
+             f'''<p class="note" style="margin-top:0">{esc(_("Renaming or moving locks the vault if it's open."))}</p>''')
     remove = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="remove">'
               '<p style="margin:0">' + esc(_("Take it off this list. The vault and its files stay where they are, and "
                                              "AI apps can no longer ask for it.")) + '</p>'
@@ -865,7 +865,7 @@ def recovery_page(d: dict) -> str:
             '<p class="msg err">' + esc(_("Write them down or keep them in a password manager. Anyone with these words "
                                           "can open the vault. They aren't stored anywhere, and your AI apps never see "
                                           "them.")) + '</p>'
-            f'<div class="actions"><a class="btn" href="{esc(d["back"])}">{esc(_("I've saved them"))}</a></div></section>')
+            f'''<div class="actions"><a class="btn" href="{esc(d["back"])}">{esc(_("I've saved them"))}</a></div></section>''')
     return page(_("Recovery key"), body, wide=True, nav=center_nav(d["csrf"], "/settings"))
 
 
