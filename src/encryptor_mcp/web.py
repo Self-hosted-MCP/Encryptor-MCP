@@ -72,12 +72,17 @@ class Center:
     """
 
     def __init__(self, journal_for, view, save, hosted: bool = False, check=None, lockout=None, provider=None,
-                 secure: bool = False, mark=lambda: "", sessions_file=None, log_file=None, lock_all=None):
+                 secure: bool = False, mark=lambda: "", sessions_file=None, log_file=None, lock_all=None,
+                 health=None, fingerprints=None, readlog=None, log_read=None):
         self.journal_for, self.view, self.save = journal_for, view, save
         self.hosted, self.check, self.provider, self.secure = hosted, check, provider, secure
         self.lockout = lockout or Lockout()
         self.sessions = Sessions(mark, sessions_file, log_file)
         self.lock_all = lock_all   # locks every vault (and removes Finder mounts); from server.py
+        self.health = health       # session -> (findings, note): the health check plus fingerprints
+        self.fingerprints = fingerprints
+        self.readlog = readlog       # session -> ReadLog (private to the person)
+        self.log_read = log_read     # (session, path, how, purpose, who)
         self.cookie = ("__Host-encryptor" if secure else "encryptor_center")
 
     def session(self, headers: dict) -> dict | None:
@@ -116,7 +121,8 @@ class Site:
                 "finder": mounts.label() if mounts and mounts.available() else None,
                 "mounted": mounts.where(s.vault.name) if mounts else "", "note": note,
                 "center": self.center is not None, "changes": [], "trash": [],
-                "center_link": "/" if self.center is None or self.center.hosted else f"/vault/{s.status_code}/center"}
+                "center_link": "/" if self.center is None or self.center.hosted else f"/vault/{s.status_code}/center",
+                "health": getattr(s, "health", None), "reads": None}
         if self.center is not None:
             j = self.center.journal_for(s)
             in_trash = {r["trash"] for r in j.trash_items()}
@@ -128,6 +134,12 @@ class Site:
                     "undoable": not s.read_only and not r.get("undone_by")
                                 and r["action"] not in ("undo", "empty_trash")
                                 and (r["action"] != "trash" or r.get("trash") in in_trash)})
+            if self.center.readlog:
+                try:
+                    entries, verdict = self.center.readlog(s).read(30)
+                    view["reads"] = {"entries": entries, "verdict": verdict}
+                except Exception:
+                    view["reads"] = {"entries": [], "verdict": "The read log can't be opened."}
             for r in j.trash_items():
                 view["trash"].append({"id": r["trash"], "change": r["id"], "path": r["path"], "kind": r.get("kind", "file"),
                                       "when": time.strftime("%d %b %H:%M", time.localtime(r["time"])), "app": r["app"]})
@@ -158,6 +170,41 @@ class Site:
             except Exception as exc:   # a plain-words reason from mount.py
                 note = str(exc)
             return 200, {}, pages.vault_page(self.vault_view(s, note))
+        if method == "POST" and action in ("health", "repair") and len(parts) == 3 and self.center is not None:
+            from .vault import health
+            m.use(s.vault.name, person=True)
+            def run_check():
+                return self.center.health(s) if self.center.health else (health.check(s.tree), "")
+            if action == "repair":
+                if s.read_only:
+                    return 403, {}, pages.vault_page(self.vault_view(s, "This vault is open read only."))
+                found = [f for f in run_check()[0] if f.fix]
+                if form.get("confirm") != "yes":
+                    return 200, {}, pages.confirm_change({
+                        "csrf": "", "action": f"/vault/{s.status_code}/repair", "back": f"/vault/{s.status_code}",
+                        "title": f"Repair {s.vault.name}?", "button": f"Yes, repair {len(found)}",
+                        "fields": {}, "facts": [(f.kind, f.where) for f in found[:8]],
+                        "lines": [f.fix for f in found[:8]] + ["Only safe repairs are made; nothing is deleted "
+                                                               "except leftover temporary files."]})
+                done = []
+                for f in found:
+                    try:
+                        if f.kind == "ChangedElsewhere" and self.center.fingerprints:
+                            n = self.center.fingerprints(s).record_all()
+                            done.append(f"Remembered the vault as it is now ({n} files).")
+                            continue
+                        done.append(health.repair(s.tree, f))
+                    except Exception as exc:
+                        done.append(f"Not repaired ({f.where}): {exc}")
+                m._event(s.vault.name, f"repaired {len(found)} problem(s) on the control center")
+                s.health = (time.time(), run_check()[0])
+                return 200, {}, pages.vault_page(self.vault_view(s, " ".join(done) or "Nothing to repair."))
+            found, note = run_check()
+            s.health = (time.time(), found)
+            n = len(found)
+            return 200, {}, pages.vault_page(self.vault_view(
+                s, ("Healthy: nothing wrong found." if not n else f"Found {n} thing(s) to look at, below.")
+                + (f" {note}" if note else "")))
         if method == "POST" and action in ("undo", "purge") and len(parts) == 3 and self.center is not None:
             m.use(s.vault.name, person=True)
             if s.read_only:
@@ -207,6 +254,8 @@ class Site:
             return 404, {}, pages.message("Not a file", f"'{rel}' isn't a file.")
         data = s.tree.read_file(e)
         m._event(s.vault.name, f"{'viewed' if action == 'open' else 'downloaded'} {rel} on the browse page")
+        if self.center and self.center.log_read:
+            self.center.log_read(s, changes.clean(rel), "viewed" if action == "open" else "downloaded", "", "You")
         name = e.name
         if action == "open":
             kind = _kind(name, data)

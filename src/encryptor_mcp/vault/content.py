@@ -138,6 +138,21 @@ class Content:
             out += self._c.open(content_key, nonce, index, bytes(body[start:start + self.chunk_size]))
         return bytes(out)
 
+    def check_ends(self, path) -> None:
+        """Opens a file's header and its last part without reading the rest: catches changed headers and files cut
+        inside their last part. (A file cut exactly between parts looks whole; the fingerprint list catches that.)
+        Raises Corrupted."""
+        size = path.stat().st_size
+        self.cleartext_size(size)
+        with open(path, "rb") as f:
+            nonce, content_key = self._c.open_header(f.read(self._c.header_size))
+            body = size - self._c.header_size
+            if body <= 0:
+                return
+            last = (body - 1) // self.chunk_size
+            f.seek(self._c.header_size + last * self.chunk_size)
+            self._c.open(content_key, nonce, last, f.read(self.chunk_size))
+
     def encrypt(self, clear: bytes) -> bytes:
         content_key = os.urandom(32)
         nonce = os.urandom(self._c.nonce_size)

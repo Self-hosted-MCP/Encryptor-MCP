@@ -351,7 +351,7 @@ def mounts():
     global _mounts
     if _mounts is None and (config().get("ENCRYPTOR_FINDER") or "on").lower() != "off":
         from .mount import Mounts
-        _mounts = Mounts(manager(), journal, CONFIG_DIR / "mounts")
+        _mounts = Mounts(manager(), journal, CONFIG_DIR / "mounts", on_read=lambda s, p, how: log_read(s, p, how))
     return _mounts
 
 
@@ -362,7 +362,8 @@ def center() -> web.Center:
     """The control center (on a computer; the web version makes its own in build_server)."""
     global _center
     if _center is None:
-        _center = web.Center(journal, settings_view, settings_save, hosted=False, lock_all=lock_everything)
+        _center = web.Center(journal, settings_view, settings_save, hosted=False, lock_all=lock_everything,
+                             health=full_health, fingerprints=fingerprints, readlog=readlog, log_read=log_read)
     return _center
 
 
@@ -484,7 +485,9 @@ def build_server(remote: bool) -> MCPServer:
     secure = public.startswith("https://")
     _center = web.Center(lambda s: journal(s), settings_view, settings_save, hosted=True, check=check, lockout=lockout,
                          provider=provider, secure=secure, mark=mark, sessions_file=STATE_DIR / "sessions.json",
-                         log_file=STATE_DIR / "signins.json", lock_all=lock_everything)
+                         log_file=STATE_DIR / "signins.json", lock_all=lock_everything,
+                         health=lambda s: full_health(s), fingerprints=lambda s: fingerprints(s),
+                         readlog=lambda s: readlog(s), log_read=lambda *a, **k: log_read(*a, **k))
     _pages = HostedPages(public)
     if secure:   # browsers then always use HTTPS for these pages
         page_html.HEADERS["Strict-Transport-Security"] = "max-age=31536000"
@@ -689,7 +692,8 @@ def _size(n: int) -> str:
 
 
 @mcp.tool(annotations=READ)
-def read_file(vault: str, path: str, purpose: str, offset: int = 0, max_chars: int = 50_000) -> str:
+def read_file(vault: str, path: str, purpose: str, ctx: Context = None, offset: int = 0,
+              max_chars: int = 50_000) -> str:
     """Read a text file from an open vault. purpose: a few words on why (kept in the log). offset and max_chars
     read a long file in parts. Pictures and other binary files aren't returned as text."""
     s = session_for(vault)
@@ -699,6 +703,7 @@ def read_file(vault: str, path: str, purpose: str, offset: int = 0, max_chars: i
     except keys.VaultError as exc:
         raise ToolError(str(exc))
     manager()._event(s.vault.name, f"read {path} by {s.app}" + (f": {purpose[:200]}" if purpose else ""))
+    log_read(s, changes.clean(path), "read", purpose, app_name(ctx) if ctx else s.app)
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -744,12 +749,95 @@ def find(vault: str, name_contains: str, folder: str = "/", limit: int = 100) ->
     return "\n".join(hits) or "Nothing found."
 
 
+@mcp.tool(annotations=READ)
+def health_check(vault: str) -> str:
+    """Check that an open vault's structure is whole (folders, long names, files), like Cryptomator's own health
+    check, plus files that were cut or changed. Read only: repairs are made by the user on the control center."""
+    s = session_for(vault)
+    found, note = full_health(s)
+    s.health = (time.time(), found)
+    if not found:
+        return f"{s.vault.name} is healthy: nothing wrong found." + (f" {note}" if note else "")
+    lines = [f"{f.severity.upper()}  {f.where}: {f.detail}" + (" (a safe repair exists)" if f.fix else "")
+             for f in found[:100]]
+    fixable = sum(1 for f in found if f.fix)
+    return ("\n".join(lines) + (f"\n\n{fixable} can be repaired safely: the user does this on the control center "
+                                "(call control_center), on the vault's page." if fixable else ""))
+
+
+@mcp.tool(annotations=READ)
+def locate(vault: str, path: str) -> str:
+    """Where a file or folder of an open vault is stored encrypted on disk (relative to the vault's folder): handy
+    for sync conflicts or backups."""
+    s = session_for(vault)
+    try:
+        where = s.tree.locate(changes.clean(path))
+    except keys.VaultError as exc:
+        raise ToolError(str(exc))
+    lines = [f"{path}: {where['kind']}", f"Entry: {where['entry']}"]
+    if "contents" in where and where["contents"] != where["entry"]:
+        lines.append(f"Contents: {where['contents']}")
+    if "folder" in where:
+        lines.append(f"Its files are in: {where['folder']}")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=READ)
+def decrypt_name(vault: str, encrypted_path: str) -> str:
+    """The real path of an encrypted path inside an open vault, like d/AB/CDEF.../name.c9r (as shown by a sync app
+    or a file browser)."""
+    s = session_for(vault)
+    try:
+        clear = s.tree.decrypt_path(encrypted_path)
+    except keys.VaultError as exc:
+        raise ToolError(str(exc))
+    if changes.is_meta(clear):
+        return f"{encrypted_path} belongs to Encryptor's own records (versions, trash, change log)."
+    return f"{encrypted_path} is {clear}"
+
+
 # ---------------------------------------------------------------- changing files
 
 def journal(s) -> changes.Journal:
     if s.journal is None:
         s.journal = changes.Journal(s.tree, CONFIG_DIR / "locks")
+        s.journal.after_change.append(lambda rec: fingerprints(s).after_change(rec))
     return s.journal
+
+
+def fingerprints(s):
+    """The open vault's fingerprint list (kept outside the vault, encrypted with a key made from its own key)."""
+    if getattr(s, "fp", None) is None:
+        from .fingerprints import Fingerprints
+        s.fp = Fingerprints(STATE_DIR / "fingerprints", s.key, s.tree)
+    return s.fp
+
+
+def readlog(s):
+    """The open vault's read log (private to the person; kept outside the vault, encrypted, chained)."""
+    if getattr(s, "readlog", None) is None:
+        from .readlog import ReadLog
+        s.readlog = ReadLog(STATE_DIR / "readlogs", s.key, s.tree.vault_id)
+    return s.readlog
+
+
+def log_read(s, path: str, how: str, purpose: str = "", who: str = "") -> None:
+    try:
+        readlog(s).add(who or ("Finder" if how == "opened in Finder" else s.app), path, how, purpose,
+                       once_per=600 if how == "opened in Finder" else 0)
+    except Exception:
+        pass   # a log problem never blocks reading; the check on the vault's page will show it
+
+
+def full_health(s) -> tuple[list, str]:
+    """The health check plus the fingerprint comparison: (findings, a note). Records the fingerprints the first time."""
+    from .vault import health
+    found = health.check(s.tree)
+    fp = fingerprints(s)
+    if not fp.recorded:
+        n = fp.record_all()
+        return found, (f"Fingerprints recorded for {n} files: from now on, cut or swapped files will be caught.")
+    return found + fp.compare(), ""
 
 
 def writable(vault: str):

@@ -5,6 +5,7 @@
 //   java -cp "<Cryptomator.app>/Contents/app/mods/*" RefVault.java make <vaultDir> <SIV_GCM|SIV_CTRMAC> <password>
 //   java -cp ... RefVault.java dump <vaultDir> <password>          (one line per entry: type, path, size, sha256)
 //   java -cp ... RefVault.java write <vaultDir> <password> <path> <text>
+//   java -cp ... RefVault.java health <vaultDir> <password>          (Cryptomator's own health check: one line per problem)
 import org.cryptomator.cryptofs.CryptoFileSystemProperties;
 import org.cryptomator.cryptofs.CryptoFileSystemProvider;
 import org.cryptomator.cryptolib.api.CryptorProvider;
@@ -94,7 +95,23 @@ public class RefVault {
                 }
                 System.out.println("wrote " + args[3]);
             }
-            default -> throw new IllegalArgumentException("make | dump | write");
+            case "health" -> {
+                // Cryptomator's own health checks; prints one line per problem: severity, kind, details
+                String password = args[2];
+                Masterkey mk = new MasterkeyFileAccess(new byte[0], RNG).load(vault.resolve("masterkey.cryptomator"), password);
+                var unverified = org.cryptomator.cryptofs.VaultConfig.decode(Files.readString(vault.resolve("vault.cryptomator")));
+                var config = unverified.verify(mk.getEncoded(), 8);
+                var cryptor = CryptorProvider.forScheme(config.getCipherCombo()).provide(mk.copy(), RNG);
+                for (var check : org.cryptomator.cryptofs.health.api.HealthCheck.allChecks()) {
+                    check.check(vault, config, mk, cryptor, r -> {
+                        String sev = r.getSeverity().toString();
+                        if (!sev.equals("GOOD")) {
+                            System.out.println("problem\t" + sev + "\t" + r.getClass().getSimpleName() + "\t" + r.details());
+                        }
+                    });
+                }
+            }
+            default -> throw new IllegalArgumentException("make | dump | write | health");
         }
     }
 }

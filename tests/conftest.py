@@ -8,7 +8,14 @@ import base64
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
+
+# Every test run gets its own throwaway settings folder, before anything imports the server: tests never touch the
+# real ~/.config/encryptor-mcp (sessions, logs, fingerprints).
+os.environ["ENCRYPTOR_CONFIG_DIR"] = tempfile.mkdtemp(prefix="encryptor-tests-")
+os.environ.pop("ENCRYPTOR_ENV_FILE", None)
+os.environ.pop("ENCRYPTOR_DATA_DIR", None)
 
 import pytest
 
@@ -41,7 +48,7 @@ def official(*args: str) -> list[str]:
     out = subprocess.run([j, "-cp", f"{CRYPTOMATOR_MODS}/*", str(ROOT / "java" / "RefVault.java"), *safe],
                          capture_output=True, text=True, encoding="utf-8", timeout=120)
     assert out.returncode == 0, out.stderr[-2000:]
-    return sorted(line for line in out.stdout.splitlines() if line.split("\t")[0] in ("dir", "file", "link"))
+    return sorted(line for line in out.stdout.splitlines() if line.split("\t")[0] in ("dir", "file", "link", "problem"))
 
 
 @pytest.fixture(params=MODES)

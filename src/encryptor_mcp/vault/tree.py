@@ -45,6 +45,7 @@ class Tree:
         self.names = Names(key, config.shortening_threshold)
         self.content = Content(key, config.cipher_combo)
         self.cipher_combo = config.cipher_combo
+        self.vault_id = config.vault_id
         self.conflicts: list[Path] = []
 
     def dir_location(self, dir_id: bytes) -> Path:
@@ -142,6 +143,41 @@ class Tree:
         if len(data) > MAX_SYMLINK:
             raise VaultError("A link's target is too long.")
         return self.content.decrypt(data).decode("utf-8")
+
+    def locate(self, clear_path: str) -> dict:
+        """Where a clear path lives on disk: its encrypted entry, and for a folder its contents folder too."""
+        e = self.resolve(clear_path)
+        out = {"entry": e.stored.relative_to(self.root).as_posix(), "kind": e.kind}
+        if e.kind == "file":
+            out["contents"] = self.contents_path(e).relative_to(self.root).as_posix()
+        if e.kind == "dir":
+            out["folder"] = self.dir_location(e.dir_id).relative_to(self.root).as_posix()
+        return out
+
+    def decrypt_path(self, encrypted: str) -> str:
+        """The clear path for an encrypted path inside the vault, like d/AB/CDEF.../name.c9r (or .../name.c9s/...,
+        or a contents folder d/AB/CDEF...). Raises NotFound when it belongs to no folder of this vault."""
+        rel = encrypted.strip().replace("\\", "/").strip("/")
+        parts = rel.split("/")
+        if len(parts) < 3 or parts[0] != "d":
+            raise VaultError("Give a path inside the vault that starts with d/, like d/AB/CDEF.../name.c9r.")
+        folders = {self.dir_location(ROOT_DIR_ID): ("", ROOT_DIR_ID)}
+        for path, e in self.walk():
+            if e.kind == "dir":
+                folders[self.dir_location(e.dir_id)] = (path, e.dir_id)
+        loc = self.root / "d" / parts[1] / parts[2]
+        if loc not in folders:
+            raise NotFound("No folder of this vault is stored there (it may be an orphan: run the health check).")
+        clear, dir_id = folders[loc]
+        if len(parts) == 3:
+            return clear or "/"
+        name = parts[3]
+        if name.endswith(C9S):
+            name_file = loc / name / "name.c9s"
+            if not name_file.is_file():
+                raise NotFound("That long name's name.c9s is missing.")
+            name = name_file.read_text("ascii").strip()
+        return f"{clear}/{self.names.decrypt(name, dir_id)}"
 
     def walk(self, dir_id: bytes = ROOT_DIR_ID, prefix: str = ""):
         """Every entry below a folder, depth first: (clear path, entry)."""

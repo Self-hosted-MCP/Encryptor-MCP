@@ -78,6 +78,7 @@ class Journal:
         self.thread_lock = _locks.setdefault(key, threading.Lock())
         self.lock_file = (lock_dir / f"{key}.lock") if lock_dir else None
         self.recent: list[float] = []
+        self.after_change: list = []   # called with each change record
 
     # ------------------------------------------------------------ plumbing
 
@@ -141,6 +142,11 @@ class Journal:
         rec = {"id": extra.pop("id", None) or self._new_id(), "time": int(self.clock()), "app": app[:80],
                "purpose": (purpose or "")[:300], "action": action, "path": path, **extra}
         self._save(rec)
+        for fn in self.after_change:   # e.g. keep the fingerprint list in step
+            try:
+                fn(rec)
+            except Exception:
+                pass
         return rec
 
     def _keep_version(self, entry: Entry, change_id: str) -> str:

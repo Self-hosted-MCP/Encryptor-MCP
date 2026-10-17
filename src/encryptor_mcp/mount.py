@@ -55,7 +55,7 @@ def _dav():
     return locals()
 
 
-def build_provider(session, journal, manager, readonly: bool):
+def build_provider(session, journal, manager, readonly: bool, on_read=None):
     d = _dav()
     util, DAVError = d["util"], d["DAVError"]
     FORBIDDEN, TOO_LARGE = d["HTTP_FORBIDDEN"], d["HTTP_REQUEST_ENTITY_TOO_LARGE"]
@@ -286,7 +286,10 @@ def build_provider(session, journal, manager, readonly: bool):
 
         def get_content(self):
             try:
-                return io.BytesIO(self.prov.tree.read_file(self.e))
+                data = self.prov.tree.read_file(self.e)
+                if on_read:   # the read log: Finder's repeated looks (previews) count once per 10 minutes
+                    on_read(session, unicodedata.normalize("NFC", self.path), "opened in Finder")
+                return io.BytesIO(data)
             except VaultError as exc:
                 refuse(exc)
 
@@ -403,7 +406,7 @@ def same_user(local_port: int, client_port: int, run=subprocess.run) -> bool:
     return False
 
 
-def serve(session, journal, manager) -> Mount:
+def serve(session, journal, manager, on_read=None) -> Mount:
     """The WebDAV server for one open vault, on 127.0.0.1 and a free port (not mounted yet)."""
     import logging
 
@@ -422,7 +425,7 @@ def serve(session, journal, manager) -> Mount:
 
     secret = secrets.token_urlsafe(32)
     share = share_name(session.vault.name)
-    provider = build_provider(session, journal, manager, session.read_only)
+    provider = build_provider(session, journal, manager, session.read_only, on_read)
     config = {
         "host": "127.0.0.1", "port": 0,
         "provider_mapping": {f"/{secret}/v": provider},
@@ -477,7 +480,8 @@ def serve(session, journal, manager) -> Mount:
 class Mounts:
     """The Finder mounts of open vaults, removed when a vault locks."""
 
-    def __init__(self, manager, journal_for, base_dir, run=subprocess.run):
+    def __init__(self, manager, journal_for, base_dir, run=subprocess.run, on_read=None):
+        self.on_read = on_read
         self.base_dir = base_dir            # mount points go here: <base_dir>/<vault name>
         self.manager = manager
         self.journal_for = journal_for      # session -> changes.Journal (the same one the AI's tools use)
@@ -502,7 +506,7 @@ class Mounts:
         with self.mutex:
             m = self.active.get(session.vault.name.casefold())
             if m is None:
-                m = serve(session, self.journal_for(session), self.manager)
+                m = serve(session, self.journal_for(session), self.manager, self.on_read)
                 point = self.base_dir / m.share
                 point.mkdir(parents=True, exist_ok=True)
                 # -S: no dialogs, and if this server goes away the volume is removed at once

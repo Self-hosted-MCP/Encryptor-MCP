@@ -28,6 +28,8 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "PAGE_FILE", tmp_path / "state" / "settings.json")
     monkeypatch.setattr(server, "OAUTH_FILE", tmp_path / "state" / "oauth.json")
     monkeypatch.setattr(server, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(server, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(server, "UPDATE_FILE", tmp_path / "state" / "update.json")
     monkeypatch.setenv("ENCRYPTOR_VAULTS", f"GCM={v1}")
     monkeypatch.delenv("ENCRYPTOR_MODES", raising=False)
     monkeypatch.delenv("ENCRYPTOR_IDLE_MINUTES", raising=False)
@@ -82,7 +84,7 @@ def csrf_of(html):
 def test_local_center_needs_the_one_time_link(local):
     client, lp, _ = local
     r = client.get("/")
-    assert r.status_code == 200 and "Ask your AI app to open" in r.text and "GCM" not in r.text
+    assert r.status_code == 200 and "Open your control center" in r.text and "GCM" not in r.text
     assert client.get("/signin/not-a-code").status_code == 410
     link = lp.signin_url().split(lp.base)[1]
     r = client.get(link, follow_redirects=False)
@@ -399,3 +401,17 @@ def test_about_and_update_check(local, monkeypatch):
                         lambda req, timeout=5: io.BytesIO(_json.dumps({"tag_name": "v0.2.0", "html_url": "https://x"}).encode()))
     r = client.post("/about", data={"csrf": csrf, "kind": "check_now"}, headers={"origin": lp.base})
     assert "Version 0.2.0 is available" in r.text
+
+
+def test_read_log_on_the_vault_page_only(local):
+    client, lp, _ = local
+    m = server.manager()
+    s = m.unlock(m.request_unlock("GCM", "Claude"), PW)
+    server.read_file("GCM", "/hello.txt", "check the greeting")
+    client.get(f"/vault/{s.status_code}/open/hello.txt")
+    page = client.get(f"/vault/{s.status_code}").text
+    assert "Read log" in page and "Private to you. Your AI apps can" in page
+    assert "Read /hello.txt" in page and "check the greeting" in page and "Viewed /hello.txt" in page
+    assert "Intact: 2 entries" in page
+    tools = {t.name for t in asyncio.run(server.mcp.list_tools())}
+    assert not any("log" in name for name in tools)                       # no AI tool reads it

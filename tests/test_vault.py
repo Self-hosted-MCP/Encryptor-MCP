@@ -127,3 +127,24 @@ def test_names_need_the_right_folder():
     assert n.encrypt("Café.txt", b"folder-1") == enc   # NFC: the same name either way
     with pytest.raises(keys.VaultError):
         n.decrypt(enc, b"folder-2")
+
+
+def test_locate_and_decrypt_name_round_trip(vault):
+    path, mode = vault
+    t = open_tree(path, mode)
+    for _, e in t.walk():
+        pass
+    checked = 0
+    for clear, e in t.walk():
+        where = t.locate(clear)
+        assert t.decrypt_path(where["entry"]) == clear
+        if e.kind == "dir":
+            assert t.decrypt_path(where["folder"]) == clear
+        checked += 1
+    assert checked == 10
+    assert t.decrypt_path(t.locate("/Folder A")["entry"] + "/") == "/Folder A"   # trailing slash is fine
+    import pytest as _p
+    with _p.raises(Exception, match="starts with d/"):
+        t.decrypt_path("hello.txt")
+    with _p.raises(Exception, match="No folder"):
+        t.decrypt_path("d/ZZ/NOTAFOLDER/abc.c9r")

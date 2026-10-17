@@ -299,6 +299,44 @@ def unlock_form(code: str, vault: str, app: str, purpose: str, error: str = "", 
 
 # ---------------------------------------------------------------- one open vault
 
+def _reads_html(v: dict) -> str:
+    """Who opened which file, and why: private to the person, checked for tampering."""
+    r = v.get("reads")
+    if r is None:
+        return ""
+    rows = "".join(
+        f'<tr><td class="when">{_when(e["time"])}</td><td class="what">{esc(e["how"].capitalize())} {esc(e["path"])}'
+        f'<small>{esc(e["who"])}{(" · " + esc(e["purpose"])) if e.get("purpose") else ""}</small></td><td></td></tr>'
+        for e in r["entries"])
+    intact = r["verdict"].startswith(("Intact", "Nothing"))
+    return ('<section class="card" id="reads"><h2><span class="mark">Read log</span></h2>'
+            '<p class="msg ok">Private to you. Your AI apps can\'t see this log.</p>'
+            + (f'<table class="record">{rows}</table>' if rows else '<p class="empty">Nothing read yet.</p>')
+            + f'<p class="{"note" if intact else "msg err"}">{esc(r["verdict"])}</p></section>')
+
+
+def _health_html(v: dict, base: str) -> str:
+    """The vault's health: a check button, the last result, and a repair button when safe repairs exist."""
+    h = v.get("health")
+    rows, fixable = [], 0
+    if h:
+        for f in h[1]:
+            fixable += bool(f.fix)
+            label = {"critical": "Needs attention", "warn": "Worth a look", "info": "Harmless"}[f.severity]
+            rows.append(f'<li><div class="main"><div class="name">{esc(f.where)}</div><div class="meta"><b>{label}</b> · '
+                        f'{esc(f.detail)}{(" Repair: " + esc(f.fix)) if f.fix else ""}</div></div></li>')
+    when = f'<p class="meta">Last checked {_when(h[0])}.</p>' if h else ""
+    result = (f'<ul class="rows vaults">{"".join(rows)}</ul>' if rows else
+              ('<p class="empty">Healthy: nothing wrong found.</p>' if h else
+               '<p class="empty">Checks that every folder, long name and file is whole, like Cryptomator\'s own '
+               'health check, plus cut or changed files.</p>'))
+    repair = (f'<form method="post" action="{base}/repair"><button class="btn" type="submit">Repair {fixable} '
+              f'safely</button></form>' if fixable and not v["read_only"] else "")
+    return (f'<section class="card" id="health"><h2><span class="mark">Health</span></h2>{when}{result}'
+            f'<div class="actions"><form method="post" action="{base}/health"><button class="btn plain" type="submit">'
+            f'{"Check again" if h else "Check health"}</button></form>{repair}</div></section>')
+
+
 def _action(a: str) -> str:
     return {"create": "Created", "write": "Changed", "append": "Added to", "mkdir": "New folder", "move": "Moved",
             "copy": "Copied to", "trash": "Trashed", "restore": "Restored", "undo": "Undid",
@@ -359,7 +397,8 @@ def vault_page(v: dict) -> str:
         trash = f'<ul class="rows">{"".join(trash_rows)}</ul>{purge}'
     else:
         trash = '<p class="empty">The trash is empty.</p>'
-    body = head + f'<section class="card"><h2><span class="mark">Record</span></h2>{record}<h2><span class="mark">Trash</span></h2>{trash}</section>'
+    body = (head + f'<section class="card"><h2><span class="mark">Record</span></h2>{record}<h2><span class="mark">Trash</span></h2>{trash}</section>'
+            + _reads_html(v) + _health_html(v, base))
     return page(v["name"], body, nav=f'<a href="{esc(v.get("center_link", "/"))}">All vaults</a>')
 
 
@@ -649,11 +688,11 @@ def confirm_change(d: dict) -> str:
             f'<h1><span class="mark">{esc(d["title"])}</span></h1>'
             + (f'<dl class="facts">{facts}</dl>' if facts else "")
             + "".join(f'<p>{esc(line)}</p>' for line in d["lines"])
-            + f'<form method="post" action="{esc(d["action"])}">{_csrf(d["csrf"])}{keep}'
+            + f'<form method="post" action="{esc(d["action"])}">{_csrf(d["csrf"]) if d["csrf"] else ""}{keep}'
             '<input type="hidden" name="confirm" value="yes">'
             f'<div class="actions"><button class="btn" type="submit">{esc(d["button"])}</button>'
-            f'<a class="btn plain" href="{esc(d["action"])}">Cancel</a></div></form></section>')
-    return page(d["title"], body, nav=center_nav(d["csrf"], "/settings"))
+            f'<a class="btn plain" href="{esc(d.get("back") or d["action"])}">Cancel</a></div></form></section>')
+    return page(d["title"], body, nav=center_nav(d["csrf"], "/settings") if d["csrf"] else "")
 
 
 def signin(hosted: bool, error: str = "") -> str:
@@ -667,10 +706,11 @@ def signin(hosted: bool, error: str = "") -> str:
                 '<p class="note">The passphrase you set for this server. Five wrong tries pause sign-in for 15 minutes.</p>'
                 '</section>')
     else:
-        body = (f'<section class="card">{_msg(error)}<h1><span class="mark">Your vaults</span></h1>'
-                '<p>Ask your AI app to open the Encryptor MCP control center. It opens here, in your own browser.</p>'
-                '<p class="note">The page of a vault you just unlocked has a link here too. The link never goes through '
-                'the chat.</p></section>')
+        body = (f'<section class="card">{_msg(error)}<h1><span class="mark">Open your control center</span></h1>'
+                '<p>For your safety, this page only opens from your AI app. Just ask it: '
+                '<b>“Open my Encryptor control center.”</b> It opens right here, already signed in.</p>'
+                '<p class="note">Already unlocked a vault? Its page has an “All vaults” link that brings '
+                'you here too.</p></section>')
     return page("Sign in", body)
 
 

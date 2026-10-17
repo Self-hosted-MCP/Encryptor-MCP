@@ -66,6 +66,9 @@ class Session:
     purpose: str
     status_code: str = field(default_factory=lambda: secrets.token_urlsafe(24))
     journal: object = None      # changes.Journal, made on the first change
+    health: object = None       # (time, findings) of the last health check
+    fp: object = None           # fingerprints.Fingerprints, made on the first health check
+    readlog: object = None      # readlog.ReadLog, made on the first read
 
 
 class UnlockManager:
