@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/a682dbe5-bec8-4c03-af99-07ef7fa1f529
+
 <p align="center"><img src="docs/images/icon.png" alt="" width="88"></p>
 
 <h1 align="center">Encryptor MCP</h1>
