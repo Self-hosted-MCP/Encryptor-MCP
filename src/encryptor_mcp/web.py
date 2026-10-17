@@ -337,8 +337,11 @@ class Site:
         note, error = "", ""
         if method == "POST":
             kind = form.get("kind", "")
-            if kind == "remove" and form.get("confirm") != "yes":
-                error = "Tick the box to confirm."
+            if kind in ("rename", "path", "remove") and form.get("confirm") != "yes":
+                ask = self.double_check(kind, name, form, sess)
+                if ask:
+                    return 200, {}, ask
+                error = "Fill in the new name or folder first."
             else:
                 try:
                     note = c.save(kind, {**form, "name": name})
@@ -365,6 +368,38 @@ class Site:
             "vault": row, "csrf": sess["csrf"], "note": note, "error": error, "open": s is not None,
             "app": s.app if s else "", "status_code": s.status_code if s else "", "format": fmt,
             "idle_all": int(m.idle // 60), "setup_file": c.view().get("setup_file", "")})
+
+    def double_check(self, kind: str, name: str, form: dict, sess: dict) -> str | None:
+        """The confirmation page for a critical change to a vault (rename, move, remove), or None if it can't
+        be asked yet (an empty field)."""
+        row = next((v for v in self.center.view()["vaults"] if v["name"].casefold() == name.casefold()), None)
+        if row is None:
+            return None
+        action = f"/settings/vault/{quote(row['name'])}"
+        base = {"csrf": sess["csrf"], "action": action}
+        if kind == "rename":
+            new = (form.get("new_name") or "").strip()
+            if not new:
+                return None
+            return pages.confirm_change({**base, "title": f"Rename {row['name']}?", "button": "Yes, rename",
+                                         "fields": {"kind": "rename", "new_name": new},
+                                         "facts": [("Now", row["name"]), ("New name", new)],
+                                         "lines": ["Your AI apps will know it by the new name.",
+                                                   "If it's open, it locks first."]})
+        if kind == "path":
+            new = (form.get("path") or "").strip()
+            if not new:
+                return None
+            return pages.confirm_change({**base, "title": f"Change {row['name']}'s folder?", "button": "Yes, change folder",
+                                         "fields": {"kind": "path", "path": new},
+                                         "facts": [("Now", pages.home(row["path"])), ("New folder", new)],
+                                         "lines": ["Nothing is copied or moved: the vault entry just points at the new "
+                                                   "folder.", "If it's open, it locks first."]})
+        return pages.confirm_change({**base, "title": f"Remove {row['name']}?", "button": "Yes, remove it",
+                                     "fields": {"kind": "remove"},
+                                     "facts": [("Folder", pages.home(row["path"]))],
+                                     "lines": ["It comes off this list. The vault and its files stay where they are.",
+                                               "AI apps can no longer ask for it. You can add it again anytime."]})
 
     # ------------------------------------------------ AI-app login (a server only)
 

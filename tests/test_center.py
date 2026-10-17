@@ -157,9 +157,9 @@ def test_setup_file_vaults_are_editable_on_the_page(local, monkeypatch):
     assert "GCM: locked\n" in server.vaults() + "\n" and "read only" not in server.vaults()
     client.post("/settings", data={"csrf": csrf, "kind": "idle", "idle": "30"}, headers=o)
     assert server.manager().idle == 30 * 60
-    r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "Main"}, headers=o)
+    r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "Main", "confirm": "yes"}, headers=o)
     assert "Renamed GCM to Main" in r.text and "Main: locked" in server.vaults()
-    r = client.post("/settings/vault/Main", data={"csrf": csrf, "kind": "path", "path": str(v2)}, headers=o)
+    r = client.post("/settings/vault/Main", data={"csrf": csrf, "kind": "path", "path": str(v2), "confirm": "yes"}, headers=o)
     assert "points at the new folder" in r.text
     m = server.manager()
     assert m.unlock(m.request_unlock("Main"), "test-password-SIV_CTRMAC")   # now the CTR vault
@@ -308,7 +308,11 @@ def test_per_vault_settings_page(local):
     r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "mode", "mode": "read"}, headers=o)
     assert "read only" in r.text.lower() and "Spare: locked (read only)" in server.vaults()
     r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove"}, headers=o)
-    assert r.status_code == 400 and "Tick the box" in r.text
+    assert "Remove Spare?" in r.text and "Yes, remove it" in r.text and "Spare" in server.vaults()   # asked, not done
+    r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "rename", "new_name": "Other"}, headers=o)
+    assert "Rename Spare?" in r.text and "Other" not in server.vaults()
+    r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "path", "path": str(v1)}, headers=o)
+    assert "Change Spare&#x27;s folder?" in r.text or "Change Spare's folder?" in r.text
     r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove", "confirm": "yes"}, headers=o)
     assert "Removed Spare" in r.text and "Your vaults" in r.text and "Spare" not in server.vaults()
     assert client.get("/settings/vault/Nope").status_code == 404
@@ -355,12 +359,12 @@ def test_rename_move_own_autolock_and_default(local):
     r = client.post(base, data={"csrf": csrf, "kind": "default", "on": "yes"}, headers=o)
     assert "default vault" in r.text and "Spare: locked  [default" in server.vaults()
     s = m.unlock(m.request_unlock("Spare"), "test-password-SIV_CTRMAC")
-    r = client.post(base, data={"csrf": csrf, "kind": "rename", "new_name": "Archive"}, headers=o)
+    r = client.post(base, data={"csrf": csrf, "kind": "rename", "new_name": "Archive", "confirm": "yes"}, headers=o)
     assert "Renamed Spare to Archive" in r.text and m.status("Archive") is None and set(s.key.enc) == {0}
     assert "Archive: locked  [default" in server.vaults() and m.idle_for(m.spec("Archive")) == 30 * 60
-    r = client.post("/settings/vault/Archive", data={"csrf": csrf, "kind": "path", "path": str(v1.parent / "nope")}, headers=o)
+    r = client.post("/settings/vault/Archive", data={"csrf": csrf, "kind": "path", "path": str(v1.parent / "nope"), "confirm": "yes"}, headers=o)
     assert r.status_code == 400 and "no vault.cryptomator" in r.text
-    r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "X"}, headers=o)
+    r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "X", "confirm": "yes"}, headers=o)
     assert "Renamed GCM to X" in r.text
 
 

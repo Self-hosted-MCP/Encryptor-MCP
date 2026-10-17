@@ -620,9 +620,8 @@ def vault_settings(d: dict) -> str:
              '<button class="btn small plain" type="submit">Change</button></div></form>'
              '<p class="note" style="margin-top:0">Renaming or moving locks the vault if it\'s open.</p>')
     remove = (f'<form method="post" action="{action}">{hidden}<input type="hidden" name="kind" value="remove">'
-              '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
-              '<span>Remove it from this list. The vault and its files stay where they are, and AI apps can no '
-              'longer ask for it.</span></label>'
+              '<p style="margin:0">Take it off this list. The vault and its files stay where they are, and AI apps '
+              'can no longer ask for it.</p>'
               '<div class="actions"><button class="btn plain" type="submit">Remove from the list</button></div></form>')
     body = (f'{_msg(d["error"])}{_msg(d["note"], ok=True)}'
             f'<section class="card"><h1><span class="mark">{esc(v["name"])}</span></h1>'
@@ -640,6 +639,21 @@ def vault_settings(d: dict) -> str:
             f'<section class="card"><h2><span class="mark">Name and folder</span></h2>{place}</section>'
             f'<section class="card"><h2><span class="mark">Remove</span></h2>{remove}</section>')
     return page(f"{v['name']} settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
+
+
+def confirm_change(d: dict) -> str:
+    """The double check before a critical change: what will happen, then Yes or Cancel."""
+    keep = "".join(f'<input type="hidden" name="{esc(k)}" value="{esc(v)}">' for k, v in d["fields"].items())
+    facts = "".join(f'<dt>{esc(k)}</dt><dd class="path" title="{esc(v)}">{esc(v)}</dd>' for k, v in d.get("facts", []))
+    body = ('<section class="card">'
+            f'<h1><span class="mark">{esc(d["title"])}</span></h1>'
+            + (f'<dl class="facts">{facts}</dl>' if facts else "")
+            + "".join(f'<p>{esc(line)}</p>' for line in d["lines"])
+            + f'<form method="post" action="{esc(d["action"])}">{_csrf(d["csrf"])}{keep}'
+            '<input type="hidden" name="confirm" value="yes">'
+            f'<div class="actions"><button class="btn" type="submit">{esc(d["button"])}</button>'
+            f'<a class="btn plain" href="{esc(d["action"])}">Cancel</a></div></form></section>')
+    return page(d["title"], body, nav=center_nav(d["csrf"], "/settings"))
 
 
 def signin(hosted: bool, error: str = "") -> str:
