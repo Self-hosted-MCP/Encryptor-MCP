@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 (2026-10-16)
+
+- On a hosting company, new vaults are suggested in `/data/vaults`, on the disk that survives restarts.
+- The weekly `encryptor-mcp update` job finds uv even with the short PATH that launchd and cron use.
+- `encryptor-mcp translate` shows its own command in its messages.
+- Docs: hosting, updates and the plugin install, corrected.
+
 ## 0.1.0 (2026-10-16)
 
 First version.
