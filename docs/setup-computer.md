@@ -192,9 +192,136 @@ Then restart your AI app. More, including a weekly update by itself: [updates.md
 
 Your vaults are not touched and keep working in Cryptomator. The `.encryptor` folder with the changes, versions and trash stays inside each vault. Delete it in Cryptomator if you don't want it.
 
-## On your phone
+## Use it from your phone
 
-On a computer, Encryptor is local only: the unlock page and the control center listen on `127.0.0.1`, so only this computer can reach them. Your phone can't. For your vaults on your phone, run it on [your own server](setup-own-server.md).
+Your phone can't reach Encryptor on your computer by itself. A free **tunnel** gives your computer a public `https://` address, so the Claude or ChatGPT app on your phone can use your vaults, as long as your computer is on.
+
+```
+ Your phone             the internet               your computer
+ (Claude app)   ──►   https://your-address   ──►   tunnel  ──►  encryptor-mcp serve  ──►  your vaults
+                                                                 (asks for your passphrase once)
+```
+
+> [!WARNING]
+> Your computer must stay on and awake for the phone to work. Want it always on, even with the computer off? Use [your own server](setup-own-server.md) instead.
+
+### 1. Choose a passphrase
+
+The phone version is protected by a passphrase only you know (8 characters or more). Your AI app asks for it once when it connects.
+
+```bash
+encryptor-mcp set-passphrase
+```
+
+It asks twice and keeps only a scrambled copy (a hash) in `~/.config/encryptor-mcp/.env`.
+
+### 2. Get a public address
+
+Pick one. Both are free.
+
+**Tailscale Funnel (easiest, recommended).** Install [Tailscale](https://tailscale.com/download) and sign in. In the Tailscale admin console, turn on **HTTPS** and **Funnel** (on the **DNS** page). Then run:
+
+```bash
+tailscale funnel --bg 8767
+```
+
+It prints an address like `https://your-computer.your-tailnet.ts.net`. It stays the same every time. The encryption ends on your own computer, so Tailscale can't read what passes through.
+
+**Cloudflare Tunnel (if you own a domain on Cloudflare).** Follow Cloudflare's [create a tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/) guide, and point a name like `vault.yourdomain.com` at `http://localhost:8767`. Good to know: with Cloudflare, the encryption ends at Cloudflare, so Cloudflare's servers handle what passes through (including the vault passwords you type on the unlock page). Tailscale avoids that.
+
+> Cloudflare's no-account "quick tunnel" (`cloudflared tunnel --url http://localhost:8767`) gets a new random address each time it starts. Fine for a quick try, but you'd reconnect your AI app every time.
+
+### 3. Tell Encryptor its address
+
+Add one line to `~/.config/encryptor-mcp/.env` (the same file as step 1), with your address from step 2:
+
+```
+PUBLIC_URL=https://your-computer.your-tailnet.ts.net
+```
+
+### 4. Start the phone version
+
+```bash
+encryptor-mcp serve
+```
+
+It prints `Control center: https://your-address/` and keeps running while that window is open. Check it: open `https://your-address/health` on your phone. It shows `ok`.
+
+To keep it running without a window, see [Keep it running in the background](#keep-the-phone-version-running-in-the-background) below.
+
+### 5. Connect your AI app
+
+On the Claude website (claude.ai), add a custom connector with the address `https://your-address/mcp`. It then shows up in the Claude phone app too. A login page opens: tick which vaults the app may use, choose whether it may change files, and type your passphrase. ChatGPT and other apps: [connect-your-ai.md](connect-your-ai.md#claude-website-and-phone-app).
+
+### 6. Use it
+
+On your phone, ask your AI about your files. When it needs a vault, it gives you a link: open it, type the vault password on that page, and tell the AI it's done. The page runs on your computer, through the tunnel.
+
+The phone version and the version inside your computer's AI apps run separately: a vault you unlock on the phone is still locked on the computer, and the other way round.
+
+### Keep the phone version running in the background
+
+<details>
+<summary><b>Mac</b></summary>
+
+Save this as `~/Library/LaunchAgents/com.encryptor-mcp.serve.plist` (replace `YOU` with your user name; `which encryptor-mcp` shows the right path):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.encryptor-mcp.serve</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/YOU/.local/bin/encryptor-mcp</string><string>serve</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/encryptor-mcp-serve.log</string>
+</dict>
+</plist>
+```
+
+Turn it on:
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.encryptor-mcp.serve.plist
+```
+
+To stop it: `launchctl bootout gui/$(id -u)/com.encryptor-mcp.serve`.
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+Save as `~/.config/systemd/user/encryptor-mcp.service`:
+
+```ini
+[Unit]
+Description=Encryptor MCP (phone version)
+
+[Service]
+ExecStart=%h/.local/bin/encryptor-mcp serve
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+Then:
+
+```bash
+systemctl --user enable --now encryptor-mcp
+```
+
+</details>
+
+<details>
+<summary><b>Windows</b></summary>
+
+In **Task Scheduler**, create a task that runs `encryptor-mcp` with the argument `serve`, **At log on**, and tick **Restart if the task fails**.
+
+</details>
 
 ## What we tested
 

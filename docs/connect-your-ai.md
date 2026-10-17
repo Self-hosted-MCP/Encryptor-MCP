@@ -3,7 +3,7 @@
 Any app that speaks MCP can use Encryptor MCP. It works with your Cryptomator vaults. There are two ways an app can reach it:
 
 - **On the same computer (`stdio`).** The app starts its own small copy of Encryptor MCP. No login and no web address needed. You need the command installed (see [below](#before-you-start-install-the-command)).
-- **Over the internet (your own server).** The app connects to `https://your-domain/mcp`. The first time, you type the server passphrase once and tick which vaults the app may ask for and whether it may change files. You need [your own server](setup-own-server.md) (Docker). Phone apps and web apps (claude.ai, ChatGPT) use this way.
+- **Over the internet (your own server).** The app connects to `https://your-domain/mcp`. The first time, you type the server passphrase once and tick which vaults the app may ask for and whether it may change files. You need [your own server](setup-own-server.md) (Docker), or your computer with a free tunnel ([Use it from your phone](setup-computer.md#use-it-from-your-phone)). Phone apps and web apps (claude.ai, ChatGPT) use this way.
 
 ```mermaid
 flowchart LR

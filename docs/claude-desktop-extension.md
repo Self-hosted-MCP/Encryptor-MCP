@@ -1,6 +1,6 @@
 # Claude Desktop extension
 
-The quickest way on Claude Desktop: one file, no terminal and no settings file. Claude Desktop runs it on your computer, for Claude Desktop only. For other apps see [setup-computer.md](setup-computer.md). For your phone, see [setup-own-server.md](setup-own-server.md).
+The quickest way on Claude Desktop: one file, no terminal and no settings file. Claude Desktop runs it on your computer, for Claude Desktop only. For other apps see [setup-computer.md](setup-computer.md). For your phone, add a free tunnel on this computer ([Use it from your phone](setup-computer.md#use-it-from-your-phone)), or use [your own server](setup-own-server.md).
 
 Works with Cryptomator vaults. Not made by or affiliated with Cryptomator.
 

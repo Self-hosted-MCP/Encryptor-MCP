@@ -161,7 +161,7 @@ Encryptor itself needs no internet: it works on the vault folders on your disk. 
 <details>
 <summary><b>Can I use it on my phone?</b></summary>
 
-Yes, with the server version: run it on your own server, then connect the Claude or ChatGPT phone app to it. See [setup-own-server.md](setup-own-server.md).
+Yes, two ways. With your computer and a free tunnel (it works while your computer is on): see [Use it from your phone](setup-computer.md#use-it-from-your-phone). Or always on, with [your own server](setup-own-server.md).
 
 </details>
 

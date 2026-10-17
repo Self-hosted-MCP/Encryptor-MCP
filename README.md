@@ -109,13 +109,13 @@ More in [docs/how-it-works.md](docs/how-it-works.md).
 
 ## Choose how to run it
 
-|  | Where it runs | Works on your phone | Cost | Time | Guide |
-|---|---|---|---|---|---|
-| **Claude Desktop extension** | Your computer, inside Claude Desktop | No | Free | 2 minutes, no terminal | [claude-desktop-extension.md](docs/claude-desktop-extension.md) |
-| **1. Your computer** | Mac, Windows or Linux, for any AI app on it | No | Free | 5 minutes | [setup-computer.md](docs/setup-computer.md) |
-| **Claude Code plugin** | Your computer, inside Claude Code | No | Free | 1 minute | [below](#quick-start-about-5-minutes) |
-| **2. Your own server** | A VPS or a computer at home, with Docker | Yes, always | Free at home, or a few dollars a month for a VPS | 15 minutes, for people used to servers | [setup-own-server.md](docs/setup-own-server.md) |
-| **3. A hosting company** | Railway, Render or similar | Yes, always | A few dollars a month | 10 minutes, no terminal | [setup-hosting.md](docs/setup-hosting.md) |
+| Way | Where it runs | On your phone | Cost | Guide |
+|---|---|---|---|---|
+| **1. Your computer** | Mac, Windows or Linux, for any AI app | Yes, with a free tunnel ([how](docs/setup-computer.md#use-it-from-your-phone)) | Free | [setup-computer.md](docs/setup-computer.md) |
+| **Claude Desktop extension** | Your computer, inside Claude Desktop (no terminal) | Yes, with a free tunnel ([how](docs/setup-computer.md#use-it-from-your-phone)) | Free | [claude-desktop-extension.md](docs/claude-desktop-extension.md) |
+| **Claude Code plugin** | Your computer, inside Claude Code | Yes, with a free tunnel ([how](docs/setup-computer.md#use-it-from-your-phone)) | Free | [Quick start](#quick-start-about-5-minutes) |
+| **2. Your own server** | A VPS, or a computer at home, with Docker | Yes, always on | Free at home, or a few dollars a month | [setup-own-server.md](docs/setup-own-server.md) |
+| **3. A hosting company** | Railway, Render or similar (no terminal) | Yes, always on | A few dollars a month | [setup-hosting.md](docs/setup-hosting.md) |
 
 On a computer, vaults can be in any folder it can reach. On a server, the vault folders must be on that server, or reached through rclone. On a hosting company, they live on its disk ([where-your-vaults-live.md](docs/where-your-vaults-live.md)).
 
@@ -125,7 +125,7 @@ On a computer, vaults can be in any folder it can reach. On a server, the vault 
 > On a hosting company, an open vault's keys live in that company's memory. Read [setup-hosting.md](docs/setup-hosting.md) first, and prefer your own computer or server when you can.
 
 > [!TIP]
-> Not sure? Start with **1** (or the extension or plugin, if you use Claude Desktop or Claude Code): free, and your keys never leave your computer. Move to **2** when you want your vaults on your phone too.
+> Not sure? Start with **1** (or the extension or plugin, if you use Claude Desktop or Claude Code): free, and your keys never leave your computer. For your phone, add a free tunnel to it, or move to **2** when you want it always on, even with your computer off.
 >
 > Using an AI coding agent like Claude Code, Codex or Cursor? Ask it to set this up for you: [AGENTS.md](AGENTS.md) explains the project to it.
 
@@ -196,7 +196,7 @@ Your own page for your vaults: unlock and lock, browse files, the record of chan
 |---|---|
 | [Claude Desktop extension](docs/claude-desktop-extension.md) | You use Claude Desktop and want one click |
 | [Setup on your computer](docs/setup-computer.md) | You want to try it, free, with any AI app |
-| [Setup on your own server](docs/setup-own-server.md) | You want your vaults on your phone, and have a server with Docker |
+| [Setup on your own server](docs/setup-own-server.md) | You want your vaults on your phone always on, and have a server with Docker |
 | [Setup on a hosting company](docs/setup-hosting.md) | You want it always on, without a terminal, and accept the trade-off |
 | [Connect your AI app](docs/connect-your-ai.md) | It's installed and you want to use it in your app |
 | [Where your vaults live](docs/where-your-vaults-live.md) | Your vaults are in Nextcloud, Dropbox, iCloud, a USB disk or the cloud |
