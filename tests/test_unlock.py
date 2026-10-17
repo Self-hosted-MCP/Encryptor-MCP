@@ -160,7 +160,7 @@ def test_page_unlock_status_and_lock(page):
     status, headers, _ = call(lp, "POST", f"/unlock/{code}", {"password": PW, "keep": "1h", "read_only": "yes"})
     assert status == 303 and mgr.status("Test").read_only
     status, _, body = call(lp, "GET", headers["Location"])
-    assert "Open (read only)" in body and "1 hour" in body and "locks after 10 minutes" in body and PW not in body
+    assert "Read only" in body and "1 hour" in body and "locks after 10 minutes" in body and PW not in body
     assert call(lp, "GET", f"/unlock/{code}")[0] == 410
     key = mgr.status("Test").key
     assert call(lp, "POST", headers["Location"] + "/lock", {})[0] == 200

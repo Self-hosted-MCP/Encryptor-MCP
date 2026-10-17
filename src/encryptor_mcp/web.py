@@ -16,14 +16,17 @@ posts must come from this server's own pages.
 
 from __future__ import annotations
 
+import hmac
 import mimetypes
 import threading
 import time
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import changes, pages
 from .vault import keys
+from .auth import Lockout, Sessions
 from .unlock import UnlockManager, UnlockRefused
 
 MAX_FORM = 8 * 1024
@@ -50,73 +53,308 @@ def _kind(name: str, data: bytes) -> str | None:
     return None
 
 
-def _status(manager: UnlockManager, s, mounts, note: str = "") -> tuple[int, dict, str]:
-    ends = time.strftime("%H:%M", time.localtime(s.expires))
-    finder = mounts.label() if mounts and mounts.available() else None
-    return 200, {}, pages.unlocked(s.vault.name, s.status_code, s.read_only, s.keep, s.app, ends,
-                                   int(manager.idle // 60), finder, mounts.where(s.vault.name) if mounts else "", note)
-
-
-def _vault_pages(manager: UnlockManager, method: str, parts: list[str], mounts) -> tuple[int, dict, str | bytes]:
-    s = manager.by_status_code(parts[1])
-    if s is None:
-        return 404, {}, pages.message("Locked", "This vault is locked.", ok=True)
-    action = parts[2] if len(parts) > 2 else ""
-    rel = "/".join(unquote(p) for p in parts[3:])
-    if method == "POST" and action == "lock" and len(parts) == 3:
-        if mounts:
-            mounts.unmount(s.vault.name)
-        manager.lock(s.vault.name, "locked on the unlock page")
-        return 200, {}, pages.message("Locked", f"{s.vault.name} is locked. The keys are gone from memory.", ok=True)
-    if method == "POST" and action in ("mount", "unmount") and len(parts) == 3 and mounts:
-        manager.use(s.vault.name)
-        try:
-            if action == "mount":
-                where = mounts.mount(s)
-                note = f"Open in {mounts.label()} at {where}."
-            else:
-                mounts.unmount(s.vault.name)
-                note = f"Removed from {mounts.label()}."
-        except Exception as exc:   # a plain-words reason from mount.py
-            note = str(exc)
-        return _status(manager, s, mounts, note)
-    if method == "GET" and not action and len(parts) == 2:
-        return _status(manager, s, mounts)
-    if method != "GET" or action not in ("files", "open", "get"):
-        return 404, {}, pages.message("Not found", "There's nothing here.")
-    manager.use(s.vault.name)   # looking counts as using the vault
+def _cookies(headers: dict) -> dict[str, str]:
+    jar = SimpleCookie()
     try:
-        e = s.tree.resolve(changes.clean(rel))
-    except keys.VaultError as exc:
-        return 404, {}, pages.message("Not found", str(exc))
-    if action == "files":
-        if e.kind != "dir":
-            return 404, {}, pages.message("Not a folder", f"'{rel}' isn't a folder.")
+        jar.load(headers.get("cookie", ""))
+    except Exception:
+        return {}
+    return {k: m.value for k, m in jar.items()}
+
+
+class Center:
+    """The control center: the person's own pages (all vaults, unlock and lock, settings, connected apps).
+
+    hosted=False (a computer): sign-in only through a one-time link Encryptor opens in the person's browser, or from
+    the page of a vault the person just unlocked. hosted=True (a server): sign-in with the passphrase.
+    The other callables come from server.py: journal_for(session), view() -> settings dict, save(kind, form) -> note.
+    """
+
+    def __init__(self, journal_for, view, save, hosted: bool = False, check=None, lockout=None, provider=None,
+                 secure: bool = False, mark=lambda: ""):
+        self.journal_for, self.view, self.save = journal_for, view, save
+        self.hosted, self.check, self.provider, self.secure = hosted, check, provider, secure
+        self.lockout = lockout or Lockout()
+        self.sessions = Sessions(mark)
+        self.cookie = ("__Host-encryptor" if secure else "encryptor_center")
+
+    def session(self, headers: dict) -> dict | None:
+        return self.sessions.get(_cookies(headers).get(self.cookie, ""))
+
+    def set_cookie(self, token: str, max_age: int | None = None) -> dict:
+        parts = [f"{self.cookie}={token}", "Path=/", "HttpOnly", "SameSite=Strict"]
+        if self.secure:
+            parts.append("Secure")
+        if max_age is not None:
+            parts.append(f"Max-Age={max_age}")
+        return {"Set-Cookie": "; ".join(parts)}
+
+    def sign_in(self) -> tuple[int, dict, str]:
+        return 303, {"Location": "/", **self.set_cookie(self.sessions.new())}, ""
+
+
+class Site:
+    """Everything the pages need: the vaults (manager), Finder mounts (mounts, a computer only) and the control
+    center (center). One instance serves a computer (LocalPages) or a server (server.serve)."""
+
+    def __init__(self, manager: UnlockManager, base: str, mounts=None, center: Center | None = None):
+        self.manager, self.base, self.mounts, self.center = manager, base, mounts, center
+
+    # ------------------------------------------------ a vault's own page (gated by its secret status code)
+
+    def vault_view(self, s, note: str = "") -> dict:
+        m, mounts = self.manager, self.mounts
+        view = {"name": s.vault.name, "status_code": s.status_code, "read_only": s.read_only, "keep": s.keep,
+                "app": s.app, "ends_at": time.strftime("%H:%M", time.localtime(s.expires)),
+                "idle_minutes": int(m.idle // 60), "left_minutes": m.seconds_left(s) // 60,
+                "finder": mounts.label() if mounts and mounts.available() else None,
+                "mounted": mounts.where(s.vault.name) if mounts else "", "note": note,
+                "center": self.center is not None, "changes": [], "trash": [],
+                "center_link": "/" if self.center is None or self.center.hosted else f"/vault/{s.status_code}/center"}
+        if self.center is not None:
+            j = self.center.journal_for(s)
+            in_trash = {r["trash"] for r in j.trash_items()}
+            for r in j.records(15):
+                view["changes"].append({
+                    "id": r["id"], "when": time.strftime("%d %b %H:%M", time.localtime(r["time"])),
+                    "action": r["action"], "path": r["path"], "to": r.get("to", ""), "app": r["app"],
+                    "purpose": r.get("purpose", ""), "undone": bool(r.get("undone_by")),
+                    "undoable": not s.read_only and not r.get("undone_by")
+                                and r["action"] not in ("undo", "empty_trash")
+                                and (r["action"] != "trash" or r.get("trash") in in_trash)})
+            for r in j.trash_items():
+                view["trash"].append({"id": r["trash"], "change": r["id"], "path": r["path"], "kind": r.get("kind", "file"),
+                                      "when": time.strftime("%d %b %H:%M", time.localtime(r["time"])), "app": r["app"]})
+        return view
+
+    def vault_page(self, method: str, parts: list[str], form: dict) -> tuple[int, dict, str | bytes]:
+        m, mounts = self.manager, self.mounts
+        s = m.by_status_code(parts[1])
+        if s is None:
+            return 404, {}, pages.message("Locked", "This vault is locked.", ok=True, center=self.center is not None)
+        action = parts[2] if len(parts) > 2 else ""
+        rel = "/".join(unquote(p) for p in parts[3:])
+        if method == "POST" and action == "lock" and len(parts) == 3:
+            if mounts:
+                mounts.unmount(s.vault.name)
+            m.lock(s.vault.name, "locked on its page")
+            return 200, {}, pages.message("Locked", f"{s.vault.name} is locked. The keys are gone from memory.",
+                                          ok=True, center=self.center is not None)
+        if method == "POST" and action in ("mount", "unmount") and len(parts) == 3 and mounts:
+            m.use(s.vault.name, person=True)
+            try:
+                if action == "mount":
+                    note = f"Open in {mounts.label()}, under Locations."
+                    mounts.mount(s)
+                else:
+                    mounts.unmount(s.vault.name)
+                    note = f"Removed from {mounts.label()}."
+            except Exception as exc:   # a plain-words reason from mount.py
+                note = str(exc)
+            return 200, {}, pages.vault_page(self.vault_view(s, note))
+        if method == "POST" and action in ("undo", "purge") and len(parts) == 3 and self.center is not None:
+            m.use(s.vault.name, person=True)
+            if s.read_only:
+                return 403, {}, pages.vault_page(self.vault_view(s, "This vault is open read only."))
+            j = self.center.journal_for(s)
+            try:
+                if action == "undo":
+                    rec = j.undo(form.get("change", ""), "You (control center)", "")
+                    note = f"Undone: {rec['did']}."
+                else:
+                    if form.get("confirm") != "yes":
+                        return 400, {}, pages.vault_page(self.vault_view(
+                            s, "Tick the box to confirm. Deleting for good can't be undone."))
+                    rec = j.empty_trash(form.get("item", ""), "You (control center)", "")
+                    note = f"Deleted {len(rec['removed'])} item(s) for good."
+                m._event(s.vault.name, f"{action} on the control center")
+            except keys.VaultError as exc:
+                note = str(exc)
+            return 200, {}, pages.vault_page(self.vault_view(s, note))
+        if method == "GET" and action == "center" and len(parts) == 3 and self.center and not self.center.hosted:
+            return self.center.sign_in()   # the person just unlocked this vault here: on a computer, that's enough
+        if method == "GET" and not action and len(parts) == 2:
+            return 200, {}, pages.vault_page(self.vault_view(s))
+        if method != "GET" or action not in ("files", "open", "get"):
+            return 404, {}, pages.message("Not found", "There's nothing here.")
+        m.use(s.vault.name, person=True)   # looking counts as using the vault
+        try:
+            e = s.tree.resolve(changes.clean(rel))
+        except keys.VaultError as exc:
+            return 404, {}, pages.message("Not found", str(exc))
+        if action == "files":
+            if e.kind != "dir":
+                return 404, {}, pages.message("Not a folder", f"'{rel}' isn't a folder.")
+            rows = []
+            for item in s.tree.list_dir(e.dir_id):
+                if e.dir_id == b"" and item.name.casefold() == changes.META:
+                    continue
+                date = time.strftime("%Y-%m-%d %H:%M", time.localtime(item.stored.stat().st_mtime))
+                if item.kind == "file":
+                    size = _size(s.tree.file_size(item))
+                    viewable = (mimetypes.guess_type(item.name)[0] or "") in VIEWABLE or _maybe_text(item.name)
+                    rows.append((item.name, "file", size, date, viewable))
+                else:
+                    rows.append((item.name, item.kind, "", date, False))
+            return 200, {}, pages.browse(s.vault.name, s.status_code, rel, rows)
+        if e.kind != "file":
+            return 404, {}, pages.message("Not a file", f"'{rel}' isn't a file.")
+        data = s.tree.read_file(e)
+        m._event(s.vault.name, f"{'viewed' if action == 'open' else 'downloaded'} {rel} on the browse page")
+        name = e.name
+        if action == "open":
+            kind = _kind(name, data)
+            if kind is None:
+                return 200, {}, pages.message("Can't show this here", f"'{name}' can't be shown in the browser. Download it instead.")
+            return 200, {**FILE_HEADERS, "Content-Type": kind}, data
+        ascii_name = name.encode("ascii", "replace").decode().replace('"', "_").replace("?", "_")
+        return 200, {**FILE_HEADERS, "Content-Type": "application/octet-stream",
+                     "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"}, data
+
+    # ------------------------------------------------ the control center (gated by the sign-in cookie)
+
+    def home_view(self, sess: dict, note: str = "") -> dict:
+        m = self.manager
+        m.sweep()
         rows = []
-        for item in s.tree.list_dir(e.dir_id):
-            if e.dir_id == b"" and item.name.casefold() == changes.META:
-                continue
-            date = time.strftime("%Y-%m-%d %H:%M", time.localtime(item.stored.stat().st_mtime))
-            if item.kind == "file":
-                size = _size(s.tree.file_size(item))
-                viewable = (mimetypes.guess_type(item.name)[0] or "") in VIEWABLE or _maybe_text(item.name)
-                rows.append((item.name, "file", size, date, viewable))
-            else:
-                rows.append((item.name, item.kind, "", date, False))
-        return 200, {}, pages.browse(s.vault.name, s.status_code, rel, rows)
-    if e.kind != "file":
-        return 404, {}, pages.message("Not a file", f"'{rel}' isn't a file.")
-    data = s.tree.read_file(e)
-    manager._event(s.vault.name, f"{'viewed' if action == 'open' else 'downloaded'} {rel} on the browse page")
-    name = e.name
-    if action == "open":
-        kind = _kind(name, data)
-        if kind is None:
-            return 200, {}, pages.message("Can't show this here", f"'{name}' can't be shown in the browser. Download it instead.")
-        return 200, {**FILE_HEADERS, "Content-Type": kind}, data
-    ascii_name = name.encode("ascii", "replace").decode().replace('"', "_").replace("?", "_")
-    return 200, {**FILE_HEADERS, "Content-Type": "application/octet-stream",
-                 "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"}, data
+        for v in m.vaults.values():
+            s = m.sessions.get(v.name.casefold())
+            rows.append({"name": v.name, "mode": v.mode, "open": s is not None,
+                         "read_only": bool(s and s.read_only) or v.mode == "read",
+                         "status_code": s.status_code if s else "", "app": s.app if s else "",
+                         "ends_at": time.strftime("%H:%M", time.localtime(s.expires)) if s else "",
+                         "left_minutes": m.seconds_left(s) // 60 if s else 0})
+        apps = []
+        prov = self.center.provider
+        if prov is not None:
+            for cid, g in prov.grants.items():
+                apps.append({"id": cid, "name": prov.app_name(cid), "vaults": g.get("vaults", []),
+                             "change": g.get("change", False)})
+        return {"vaults": rows, "csrf": sess["csrf"], "note": note, "hosted": self.center.hosted, "apps": apps}
+
+    def center_page(self, method: str, parts: list[str], form: dict, headers: dict) -> tuple[int, dict, str]:
+        c, m = self.center, self.manager
+        head = parts[0] if parts else ""
+        if head == "signin":
+            if len(parts) == 2 and method == "GET" and not c.hosted:
+                if c.sessions.use_link(parts[1]):
+                    return c.sign_in()
+                return 410, {}, pages.signin(False, "This sign-in link expired or was already used.")
+            if len(parts) == 1 and c.hosted:
+                if method == "GET":
+                    return 200, {}, pages.signin(True)
+                if c.lockout.locked():
+                    return 429, {}, pages.signin(True, "Too many wrong tries. Wait 15 minutes.")
+                if not c.check(form.get("passphrase", "")):
+                    c.lockout.failed()
+                    time.sleep(1)   # slows down guessing
+                    return 401, {}, pages.signin(True, "Wrong passphrase.")
+                return c.sign_in()
+            return 404, {}, pages.message("Not found", "There's nothing here.")
+        sess = c.session(headers)
+        if sess is None:
+            return 200 if head == "" else 401, {}, pages.signin(c.hosted)
+        if method == "POST" and not hmac.compare_digest(form.get("csrf", ""), sess["csrf"]):
+            return 403, {}, pages.message("Not allowed", "This form is out of date. Reload the page and try again.")
+        if head == "" and method == "GET":
+            return 200, {}, pages.center_home(self.home_view(sess))
+        if head == "signout" and method == "POST":
+            c.sessions.end(_cookies(headers).get(c.cookie, ""))
+            return 303, {"Location": "/", **c.set_cookie("", 0)}, ""
+        if head == "vaults" and len(parts) == 3 and method == "POST":
+            name = unquote(parts[1])
+            try:
+                v = m.spec(name, person=True)
+            except UnlockRefused as exc:
+                return 404, {}, pages.center_home(self.home_view(sess, str(exc)))
+            if parts[2] == "unlock":
+                code = m.request_unlock(v.name, "You, from the control center", "", person=True)
+                return 303, {"Location": f"/unlock/{code}"}, ""
+            if parts[2] == "lock":
+                if self.mounts:
+                    self.mounts.unmount(v.name)
+                m.lock(v.name, "locked on the control center")
+                return 303, {"Location": "/"}, ""
+        if head == "apps" and len(parts) == 3 and parts[2] == "disconnect" and method == "POST" and c.provider:
+            c.provider.disconnect(unquote(parts[1]))
+            return 303, {"Location": "/"}, ""
+        if head == "settings":
+            note, error = "", ""
+            if method == "POST":
+                try:
+                    note = c.save(form.get("kind", ""), form)
+                except ValueError as exc:
+                    error = str(exc)
+            return (400 if error else 200), {}, pages.settings({**c.view(), "csrf": sess["csrf"], "note": note,
+                                                                 "error": error, "hosted": c.hosted})
+        return 404, {}, pages.message("Not found", "There's nothing here.")
+
+    # ------------------------------------------------ AI-app login (a server only)
+
+    def app_login(self, method: str, form: dict, query: dict) -> tuple[int, dict, str]:
+        prov = self.center.provider
+        req = form.get("req") or query.get("req", "")
+        info = prov.describe(req)
+        names = [v.name for v in self.manager.vaults.values() if v.mode != "hidden"]
+        if method == "GET" or info is None:
+            return (200 if info else 410), {}, pages.app_login(info, req, names)
+        chosen = [n for n in form.get("vault_list", []) if n in names]
+        try:
+            target = prov.complete_login(req, form.get("passphrase", ""), chosen, form.get("change") == "yes")
+        except (PermissionError, LookupError, ValueError) as exc:
+            return (400 if isinstance(exc, ValueError) else 403), {}, pages.app_login(info, req, names, str(exc))
+        if target is None:
+            time.sleep(1)
+            return 401, {}, pages.app_login(info, req, names, "Wrong passphrase.")
+        return 302, {"Location": target, "Referrer-Policy": "no-referrer"}, ""
+
+    # ------------------------------------------------ every request
+
+    def handle(self, method: str, path: str, form: dict, headers: dict, query: dict | None = None):
+        """Framework-free: (status, extra headers, body)."""
+        parts = [p for p in path.split("?")[0].split("/") if p]
+        theme = _cookies(headers).get("theme", "")
+        pages.THEME.set("dark" if theme == "dark" else "light")
+        pages.HERE.set(path if _safe_next(path) else "/")
+        if method == "POST" and not same_origin(headers, self.base):
+            return 403, {}, pages.message("Not allowed", "This form didn't come from this page.")
+        if parts == ["theme"] and method == "POST":   # light <-> dark, remembered by this browser for a year
+            nxt = form.get("next", "/")
+            new = "light" if theme == "dark" else "dark"
+            secure = "; Secure" if self.base.startswith("https://") else ""
+            return 303, {"Location": nxt if _safe_next(nxt) else "/",
+                         "Set-Cookie": f"theme={new}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax{secure}"}, ""
+        if len(parts) == 2 and parts[0] == "unlock":
+            return self.unlock_page(method, parts[1], form)
+        if len(parts) >= 2 and parts[0] == "vault":
+            return self.vault_page(method, parts, form)
+        if parts[:1] == ["login"] and self.center and self.center.provider:
+            return self.app_login(method, form, query or {})
+        if self.center is not None and (not parts or parts[0] in ("signin", "signout", "vaults", "settings", "apps")):
+            return self.center_page(method, parts, form, headers)
+        return 404, {}, pages.message("Not found", "There's nothing here.")
+
+    def unlock_page(self, method: str, code: str, form: dict):
+        m = self.manager
+        req = m.describe(code)
+        if req is None:
+            return 410, {}, pages.message("Link expired", "This unlock link has expired or was already used. "
+                                          "Ask your AI app to unlock the vault again.", center=self.center is not None)
+        if method == "GET":
+            return 200, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, idle_minutes=int(m.idle // 60))
+        try:
+            s = m.unlock(code, form.get("password", ""), form.get("keep", "lock"), form.get("read_only") == "yes")
+        except UnlockRefused as exc:
+            time.sleep(1)   # slows down guessing
+            return 401, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, str(exc),
+                                              idle_minutes=int(m.idle // 60))
+        return 303, {"Location": f"/vault/{s.status_code}"}, ""
+
+
+def _safe_next(path: str) -> bool:
+    """A path on this server only (no other site, no header tricks)."""
+    return (path.startswith("/") and not path.startswith("//") and len(path) < 2000
+            and not any(c in path for c in "\\\r\n\t"))
 
 
 def _maybe_text(name: str) -> bool:
@@ -132,33 +370,6 @@ def _size(n: float) -> str:
     return str(n)
 
 
-def handle(manager: UnlockManager, method: str, path: str, form: dict, headers: dict, base: str,
-           mounts=None) -> tuple[int, dict, str | bytes]:
-    """Framework-free: (status, extra headers, html). Also used by the web version later."""
-    parts = [p for p in path.split("?")[0].split("/") if p]
-    if method == "POST" and not same_origin(headers, base):
-        return 403, {}, pages.message("Not allowed", "This form didn't come from this page.")
-    if len(parts) == 2 and parts[0] == "unlock":
-        code = parts[1]
-        req = manager.describe(code)
-        if req is None:
-            return 410, {}, pages.message("Link expired", "This unlock link has expired or was already used. "
-                                          "Ask your AI app to unlock the vault again.")
-        if method == "GET":
-            return 200, {}, pages.unlock_form(code, req.vault, req.app, req.purpose,
-                                              idle_minutes=int(manager.idle // 60))
-        try:
-            s = manager.unlock(code, form.get("password", ""), form.get("keep", "lock"), form.get("read_only") == "yes")
-        except UnlockRefused as exc:
-            time.sleep(1)   # slows down guessing
-            return 401, {}, pages.unlock_form(code, req.vault, req.app, req.purpose, str(exc),
-                                              idle_minutes=int(manager.idle // 60))
-        return 303, {"Location": f"/vault/{s.status_code}"}, ""
-    if len(parts) >= 2 and parts[0] == "vault":
-        return _vault_pages(manager, method, parts, mounts)
-    return 404, {}, pages.message("Not found", "There's nothing here.")
-
-
 def same_origin(headers: dict, base: str) -> bool:
     origin = headers.get("origin")
     if origin and origin != "null":
@@ -169,9 +380,10 @@ def same_origin(headers: dict, base: str) -> bool:
 class LocalPages:
     """The unlock page on 127.0.0.1, on a free port, in a background thread."""
 
-    def __init__(self, manager: UnlockManager, port: int = 0, mounts=None):
+    def __init__(self, manager: UnlockManager, port: int = 0, mounts=None, center: Center | None = None):
         self.manager = manager
         self.mounts = mounts
+        self.center = center
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -191,9 +403,12 @@ class LocalPages:
                     if length > MAX_FORM:
                         return self._send(413, {}, "Too large.")
                     raw = self.rfile.read(length).decode("utf-8", "replace")
-                    form = {k: v[0] for k, v in parse_qs(raw, keep_blank_values=True).items()}
-                status, extra, body = handle(outer.manager, method, urlparse(self.path).path, form, headers, outer.base,
-                                             outer.mounts)
+                    parsed = parse_qs(raw, keep_blank_values=True)
+                    form = {k: v[0] for k, v in parsed.items()}
+                    form["vault_list"] = parsed.get("vault", [])
+                url = urlparse(self.path)
+                query = {k: v[0] for k, v in parse_qs(url.query).items()}
+                status, extra, body = outer.site.handle(method, url.path, form, headers, query)
                 self._send(status, extra, body)
 
             def _send(self, status: int, extra: dict, body: str | bytes):
@@ -215,10 +430,15 @@ class LocalPages:
         self.port = self.httpd.server_address[1]
         self.base = f"http://127.0.0.1:{self.port}"
         self.allowed_hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}"}
+        self.site = Site(manager, self.base, mounts, center)
         threading.Thread(target=self.httpd.serve_forever, name="unlock-page", daemon=True).start()
 
     def unlock_url(self, code: str) -> str:
         return f"{self.base}/unlock/{code}"
+
+    def signin_url(self) -> str:
+        """A one-time sign-in link for the control center (opened in the person's browser, never given to the AI)."""
+        return f"{self.base}/signin/{self.center.sessions.new_link()}"
 
     def close(self) -> None:
         self.httpd.shutdown()

@@ -8,8 +8,11 @@ The AI never sees or types a vault password: it asks to unlock, and the person t
 page or in a native box, and chooses how long the vault stays open. Keys live only in memory.
 
 Commands:
-    stdio     run for one AI app on this computer
-    version   show the installed version
+    stdio           run for one AI app on this computer (Claude Desktop, Claude Code, Cursor, Codex, ...)
+    serve           run as a web server (VPS, hosting, own server): AI apps connect over HTTPS with your
+                    passphrase, and the control center is at the server's address
+    set-passphrase  choose the passphrase for the web version (only its hash is stored)
+    version         show the installed version
 
 Settings: environment variables and/or <config folder>/.env (~/.config/encryptor-mcp/.env):
     ENCRYPTOR_VAULTS        Name=/path/to/vault;Other=/path/to/other
@@ -22,6 +25,8 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
     ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
     ENCRYPTOR_ASK_BEFORE    also approve these, comma separated: replace, trash, move (default: none; every
                             change can be undone anyway)
+    The web version also reads PUBLIC_URL (https://...), LOGIN_HASH or LOGIN_PASSPHRASE, HOST and PORT.
+Vaults, what the AI may do with each, and auto-lock can also be set on the control center; the settings above win.
 
 Every change is logged, keeps what it replaced, and can be undone; see changes.py.
 """
@@ -30,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import secrets
 import sys
@@ -43,7 +49,8 @@ from mcp_types import ToolAnnotations
 
 from pydantic import BaseModel, Field
 
-from . import ask, changes, web
+from . import ask, changes, pages as page_html, web
+from .store import private_write, read_json
 from .unlock import Locked, UnlockManager, UnlockRefused, VaultSpec
 from .vault import keys, tree
 
@@ -51,7 +58,13 @@ APP = "encryptor-mcp"
 CONFIG_DIR = Path(os.environ.get("ENCRYPTOR_CONFIG_DIR") or Path.home() / ".config" / APP).expanduser()
 ENV_FILE = Path(os.environ.get("ENCRYPTOR_ENV_FILE") or CONFIG_DIR / ".env").expanduser()
 SETTINGS = ("ENCRYPTOR_VAULTS", "ENCRYPTOR_MODES", "ENCRYPTOR_IDLE_MINUTES", "ENCRYPTOR_MAX_HOURS", "ENCRYPTOR_UNLOCK",
-            "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER")
+            "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER", "PUBLIC_URL", "LOGIN_HASH",
+            "LOGIN_PASSPHRASE", "HOST", "PORT", "RENDER_EXTERNAL_URL", "RAILWAY_PUBLIC_DOMAIN", "ALLOWED_REDIRECT_HOSTS")
+STATE_DIR = Path(os.environ.get("ENCRYPTOR_DATA_DIR") or CONFIG_DIR / "state").expanduser()
+PAGE_FILE = STATE_DIR / "settings.json"    # vaults, modes and auto-lock chosen on the control center
+OAUTH_FILE = STATE_DIR / "oauth.json"      # the web version's connected AI apps (tokens only as fingerprints)
+MODE_NAMES = ("full", "read", "hidden")
+IDLE_CHOICES = (5, 10, 15, 30, 60)
 MAX_READ_CHARS = 200_000
 MAX_WRITE_CHARS = 5_000_000
 APPROVAL_TTL = 300
@@ -70,19 +83,119 @@ def config() -> dict[str, str]:
     return cfg
 
 
-def vault_specs(cfg: dict) -> list[VaultSpec]:
-    modes = {}
+def page_settings() -> dict:
+    return read_json(PAGE_FILE, {})
+
+
+def vault_rows(cfg: dict) -> list[dict]:
+    """Every vault: from the settings file first, then the ones added on the control center. The settings file's
+    modes win over the page's."""
+    file_modes = {}
     for item in (cfg.get("ENCRYPTOR_MODES") or "").split(","):
         if "=" in item:
             name, mode = item.rsplit("=", 1)
-            modes[name.strip().casefold()] = mode.strip().lower() if mode.strip().lower() in ("full", "read", "hidden") else "read"
-    specs = []
+            file_modes[name.strip().casefold()] = mode.strip().lower() if mode.strip().lower() in MODE_NAMES else "read"
+    page = page_settings()
+    page_modes = {k.casefold(): v for k, v in (page.get("modes") or {}).items() if v in MODE_NAMES}
+    rows, seen = [], set()
+
+    def add(name: str, path: str, from_file: bool) -> None:
+        key = name.casefold()
+        if not name or not path or key in seen:
+            return
+        seen.add(key)
+        fixed = key in file_modes
+        rows.append({"name": name, "path": str(Path(path).expanduser()), "from_file": from_file, "mode_fixed": fixed,
+                     "mode": file_modes[key] if fixed else page_modes.get(key, "full")})
+
     for item in (cfg.get("ENCRYPTOR_VAULTS") or "").split(";"):
         if "=" in item:
             name, path = item.split("=", 1)
-            if name.strip() and path.strip():
-                specs.append(VaultSpec(name.strip(), Path(path.strip()).expanduser(), modes.get(name.strip().casefold(), "full")))
-    return specs
+            add(name.strip(), path.strip(), True)
+    for v in page.get("vaults") or []:
+        add(str(v.get("name", "")).strip(), str(v.get("path", "")).strip(), False)
+    return rows
+
+
+def vault_specs(cfg: dict) -> list[VaultSpec]:
+    return [VaultSpec(r["name"], Path(r["path"]), r["mode"]) for r in vault_rows(cfg)]
+
+
+def idle_minutes(cfg: dict) -> float:
+    return float(cfg.get("ENCRYPTOR_IDLE_MINUTES") or page_settings().get("idle_minutes") or 10)
+
+
+def refresh() -> None:
+    """Applies the settings (after a change on the control center, or before answering the AI)."""
+    if _manager is not None:
+        cfg = config()
+        _manager.set_vaults(vault_specs(cfg))
+        _manager.idle = idle_minutes(cfg) * 60
+
+
+def settings_view() -> dict:
+    cfg = config()
+    return {"vaults": vault_rows(cfg), "idle_minutes": int(idle_minutes(cfg)),
+            "idle_fixed": bool(cfg.get("ENCRYPTOR_IDLE_MINUTES"))}
+
+
+def settings_save(kind: str, form: dict) -> str:
+    """A change from the control center's settings page. Raises ValueError with a plain-words reason."""
+    cfg = config()
+    page = page_settings()
+    rows = {r["name"].casefold(): r for r in vault_rows(cfg)}
+    name = (form.get("name") or "").strip()
+    if kind == "mode":
+        row = rows.get(name.casefold())
+        if row is None:
+            raise ValueError(f"No vault called {name!r}.")
+        if row["mode_fixed"]:
+            raise ValueError(f"{row['name']}'s mode is set in the settings file, which wins.")
+        mode = form.get("mode", "")
+        if mode not in MODE_NAMES:
+            raise ValueError("Choose what the AI may do.")
+        page.setdefault("modes", {})[row["name"]] = mode
+        note = f"Saved: {row['name']} is now {dict(page_html.MODES)[mode].lower()}."
+    elif kind == "add":
+        path = Path((form.get("path") or "").strip()).expanduser()
+        if not name or len(name) > 60 or any(c in name for c in ";=,/\\"):
+            raise ValueError("Give the vault a short name without ; = , or slashes.")
+        if name.casefold() in rows:
+            raise ValueError(f"There's already a vault called {name!r}.")
+        if not (path / "vault.cryptomator").is_file():
+            raise ValueError("That folder has no vault.cryptomator: choose the vault's own folder.")
+        try:
+            keys.read_vault_config_unverified((path / "vault.cryptomator").read_bytes())
+        except keys.VaultError as exc:
+            raise ValueError(f"That vault can't be used: {exc}")
+        page.setdefault("vaults", []).append({"name": name, "path": str(path)})
+        mode = form.get("mode", "full")
+        if mode in MODE_NAMES and mode != "full":
+            page.setdefault("modes", {})[name] = mode
+        note = f"Added {name}."
+    elif kind == "remove":
+        row = rows.get(name.casefold())
+        if row is None or row["from_file"]:
+            raise ValueError("Only vaults added here can be removed here.")
+        page["vaults"] = [v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() != name.casefold()]
+        (page.get("modes") or {}).pop(row["name"], None)
+        note = f"Removed {row['name']} from the list. Its files weren't touched."
+    elif kind == "idle":
+        if cfg.get("ENCRYPTOR_IDLE_MINUTES"):
+            raise ValueError("Auto-lock is set in the settings file, which wins.")
+        try:
+            minutes = int(form.get("idle", ""))
+        except ValueError:
+            minutes = 0
+        if minutes not in IDLE_CHOICES:
+            raise ValueError("Choose one of the listed times.")
+        page["idle_minutes"] = minutes
+        note = f"Saved: vaults lock after {minutes} minutes without use."
+    else:
+        raise ValueError("Unknown setting.")
+    private_write(PAGE_FILE, json.dumps(page, indent=1))
+    refresh()
+    return note
 
 
 _manager: UnlockManager | None = None
@@ -93,8 +206,7 @@ def manager() -> UnlockManager:
     global _manager
     if _manager is None:
         cfg = config()
-        _manager = UnlockManager(vault_specs(cfg), float(cfg.get("ENCRYPTOR_IDLE_MINUTES") or 10),
-                                 float(cfg.get("ENCRYPTOR_MAX_HOURS") or 12))
+        _manager = UnlockManager(vault_specs(cfg), idle_minutes(cfg), float(cfg.get("ENCRYPTOR_MAX_HOURS") or 12))
         _manager.start_sweeper()
     return _manager
 
@@ -111,10 +223,31 @@ def mounts():
     return _mounts
 
 
-def pages() -> web.LocalPages:
+_center: web.Center | None = None
+
+
+def center() -> web.Center:
+    """The control center (on a computer; the web version makes its own in build_server)."""
+    global _center
+    if _center is None:
+        _center = web.Center(journal, settings_view, settings_save, hosted=False)
+    return _center
+
+
+class HostedPages:
+    """The web version's pages live on the server's own address."""
+
+    def __init__(self, public: str):
+        self.base = public
+
+    def unlock_url(self, code: str) -> str:
+        return f"{self.base}/unlock/{code}"
+
+
+def pages():
     global _pages
     if _pages is None:
-        _pages = web.LocalPages(manager(), mounts=mounts())
+        _pages = web.LocalPages(manager(), mounts=mounts(), center=center())
     return _pages
 
 
@@ -135,9 +268,50 @@ def client_supports_url_mode(ctx: Context) -> bool:
         return False
 
 
-def session_for(vault: str):
+PROVIDER = None   # the login server, in serve mode (auth.PassphraseOAuth)
+
+
+def current_app() -> str | None:
+    """The client id of the web AI app making this request, or None (on this computer, stdio)."""
+    if PROVIDER is None:
+        return None
     try:
-        return manager().use(vault)
+        from mcp.server.auth.middleware.auth_context import get_access_token
+        token = get_access_token()
+    except Exception:
+        token = None
+    return token.client_id if token else None
+
+
+def current_grant() -> dict | None:
+    """What the web AI app may use (ticked when it connected): {"vaults": [...], "change": bool}. None on this
+    computer: there the vault modes alone decide."""
+    app = current_app()
+    if app is None:
+        return None
+    return PROVIDER.grants.get(app) or {"vaults": [], "change": False}
+
+
+def granted(name: str) -> bool:
+    g = current_grant()
+    return g is None or name.casefold() in {v.casefold() for v in g.get("vaults", [])}
+
+
+def spec_for(vault: str) -> VaultSpec:
+    """A vault this AI app may use, or a plain refusal (hidden and not-granted vaults look the same: absent)."""
+    try:
+        spec = manager().spec(vault)
+    except UnlockRefused as exc:
+        raise ToolError(str(exc))
+    if not granted(spec.name):
+        raise ToolError(f"No vault called {vault!r}.")
+    return spec
+
+
+def session_for(vault: str):
+    spec = spec_for(vault)
+    try:
+        return manager().use(spec.name)
     except (Locked, UnlockRefused) as exc:
         raise ToolError(str(exc))
 
@@ -150,18 +324,90 @@ INSTRUCTIONS = (
     "their own language."
 )
 
-mcp = MCPServer("encryptor", instructions=INSTRUCTIONS, title="Encryptor")
+DEFAULT_REDIRECT_HOSTS = "claude.ai,claude.com,chatgpt.com,openai.com,vscode.dev"
+
+
+def build_server(remote: bool) -> MCPServer:
+    """remote: the web version, with the passphrase login for AI apps and the control center at its address."""
+    if not remote:
+        return MCPServer("encryptor", instructions=INSTRUCTIONS, title="Encryptor MCP")
+    from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
+    from . import auth
+    global PROVIDER, _center, _pages
+    cfg = config()
+    public = auth.public_url(cfg)
+    hosts = [h.strip() for h in (cfg.get("ALLOWED_REDIRECT_HOSTS") or DEFAULT_REDIRECT_HOSTS).split(",") if h.strip()]
+    lockout = auth.Lockout()
+    check = lambda passphrase: auth.passphrase_ok(passphrase, config())
+    provider = PROVIDER = auth.PassphraseOAuth(public, hosts, OAUTH_FILE, check, lockout)
+    mark = lambda: hashlib.sha256((config().get("LOGIN_HASH") or config().get("LOGIN_PASSPHRASE") or "").encode()).hexdigest()[:16]
+    secure = public.startswith("https://")
+    _center = web.Center(lambda s: journal(s), settings_view, settings_save, hosted=True, check=check, lockout=lockout,
+                         provider=provider, secure=secure, mark=mark)
+    _pages = HostedPages(public)
+    if secure:   # browsers then always use HTTPS for these pages
+        page_html.HEADERS["Strict-Transport-Security"] = "max-age=31536000"
+    server = MCPServer(
+        "encryptor", instructions=INSTRUCTIONS, title="Encryptor MCP",
+        auth_server_provider=provider,
+        auth=AuthSettings(
+            issuer_url=public,
+            resource_server_url=f"{public}/mcp",
+            validate_token_resource=False,
+            client_registration_options=ClientRegistrationOptions(enabled=True, valid_scopes=[auth.SCOPE],
+                                                                  default_scopes=[auth.SCOPE]),
+            revocation_options=RevocationOptions(enabled=True),
+            required_scopes=[auth.SCOPE],
+        ),
+    )
+    add_page_routes(server, web.Site(manager(), public, None, _center))
+    return server
+
+
+def add_page_routes(server: MCPServer, site) -> None:
+    """The same pages as on a computer (unlock, vault, browse, control center), plus the AI-app login."""
+    from urllib.parse import parse_qs
+    from starlette.requests import Request
+    from starlette.responses import Response
+
+    async def serve_page(request: Request) -> Response:
+        form = {}
+        if request.method == "POST":
+            body = await request.body()
+            if len(body) > web.MAX_FORM:
+                return Response("Too large.", status_code=413)
+            parsed = parse_qs(body.decode("utf-8", "replace"), keep_blank_values=True)
+            form = {k: v[0] for k, v in parsed.items()}
+            form["vault_list"] = parsed.get("vault", [])
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        status, extra, body = await asyncio.to_thread(site.handle, request.method, request.url.path, form, headers,
+                                                      dict(request.query_params))
+        return Response(body, status_code=status,
+                        headers={**page_html.HEADERS, "Content-Type": "text/html; charset=utf-8", **extra})
+
+    for path in ("/", "/theme", "/signin", "/signin/{code}", "/signout", "/settings", "/login", "/vaults/{rest:path}",
+                 "/apps/{rest:path}", "/unlock/{code}", "/vault/{rest:path}"):
+        server.custom_route(path, methods=["GET", "POST"])(serve_page)
+
+    @server.custom_route("/health", methods=["GET"])
+    async def health(request: Request) -> Response:
+        return Response("ok")
+
+
+MODE = sys.argv[1] if len(sys.argv) > 1 else "help"
+mcp = build_server(MODE == "serve")
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 
 @mcp.tool(annotations=READ)
 def vaults() -> str:
     """The vaults this app may use: open or locked, read only or not, and when an open one locks by itself."""
+    refresh()
     m = manager()
     m.sweep()
     lines = []
     for spec in m.vaults.values():
-        if spec.mode == "hidden":
+        if spec.mode == "hidden" or not granted(spec.name):
             continue
         s = m.sessions.get(spec.name.casefold())
         if s:
@@ -169,7 +415,8 @@ def vaults() -> str:
                          f"{m.seconds_left(s) // 60} minutes without use (format 8, {s.tree.cipher_combo})")
         else:
             lines.append(f"{spec.name}: locked{' (read only)' if spec.mode == 'read' else ''}")
-    return "\n".join(lines) or "No vaults are set up. The user adds them in ENCRYPTOR_VAULTS (see docs)."
+    return "\n".join(lines) or ("No vaults yet. The user adds them on the control center (call control_center) "
+                                "or in the settings file.")
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))
@@ -178,10 +425,7 @@ async def unlock(vault: str, purpose: str, ctx: Context) -> str:
     password box), never in this chat, and chooses how long it stays open. purpose: a few words on why, shown to
     the user. Never ask the user for the password yourself."""
     m = manager()
-    try:
-        spec = m.spec(vault)
-    except UnlockRefused as exc:
-        raise ToolError(str(exc))
+    spec = spec_for(vault)
     if m.status(spec.name):
         return f"{spec.name} is already open."
     app = app_name(ctx)
@@ -205,7 +449,7 @@ async def unlock(vault: str, purpose: str, ctx: Context) -> str:
             await asyncio.sleep(1)
         return "The vault is still locked: the unlock page wasn't used in time. Call unlock again if needed."
 
-    if way in ("auto", "box") and ask.available():
+    if way in ("auto", "box") and PROVIDER is None and ask.available():
         password = await asyncio.to_thread(ask.password_box, spec.name, app, purpose)
         if password is None:
             return "The user cancelled the password box, or it timed out. The vault stays locked."
@@ -217,7 +461,8 @@ async def unlock(vault: str, purpose: str, ctx: Context) -> str:
             password = None
         return f"{spec.name} is open. " + _open_note(spec.name)
 
-    return (f"Ask the user to open this link on this computer to unlock {spec.name!r}: {url}\n"
+    where = "in their browser" if PROVIDER is not None else "on this computer"
+    return (f"Ask the user to open this link {where} to unlock {spec.name!r}: {url}\n"
             "It works once, for 5 minutes. The user types the password there, never in this chat. "
             "Call vaults afterwards to check it's open.")
 
@@ -235,12 +480,30 @@ def lock(vault: str = "") -> str:
     """Lock a vault now (or every open vault, when vault is left empty). The keys are wiped from memory."""
     m = manager()
     if not vault:
-        m.lock_all("locked by the AI app")
+        for spec in list(m.vaults.values()):
+            if spec.mode != "hidden" and granted(spec.name):
+                m.lock(spec.name, "locked by the AI app")
         return "Every vault is locked."
+    spec = spec_for(vault)
+    return f"{spec.name} is locked." if m.lock(spec.name, "locked by the AI app") else f"{spec.name} was already locked."
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
+def control_center() -> str:
+    """Open the Encryptor MCP control center for the user: all their vaults (unlock, lock), what changed (undo),
+    the trash, and settings (which vaults, what the AI may do, auto-lock). On this computer it opens in the
+    user's own browser; the link is never shown here."""
+    if PROVIDER is not None:
+        return f"The control center is at {PROVIDER.public_url}/ . The user signs in there with their passphrase."
+    import webbrowser
     try:
-        return f"{vault} is locked." if m.lock(vault, "locked by the AI app") else f"{vault} was already locked."
-    except UnlockRefused as exc:
-        raise ToolError(str(exc))
+        opened = webbrowser.open(pages().signin_url())
+    except Exception:
+        opened = False
+    if opened:
+        return "Opened the control center in the user's browser on this computer."
+    return ("No browser could be opened here. The user can open the control center from the page of a vault they "
+            "unlocked.")
 
 
 def _resolve(s, path: str) -> tree.Entry:
@@ -344,6 +607,9 @@ def journal(s) -> changes.Journal:
 
 def writable(vault: str):
     s = session_for(vault)
+    g = current_grant()
+    if g is not None and not g.get("change"):
+        raise ToolError(f"This app may only read {s.vault.name}. The user can allow changes when connecting it again.")
     if s.read_only:
         raise ToolError(f"{s.vault.name} is open read only. If changes are needed, ask the user to lock it and "
                         "unlock it again without 'read only'." if s.vault.mode != "read"
@@ -583,9 +849,60 @@ def current_version() -> str:
         return "0.0.0"
 
 
+def set_passphrase() -> None:
+    import getpass
+    from .auth import MIN_PASSPHRASE
+    from .store import hash_passphrase
+    first = getpass.getpass(f"New passphrase ({MIN_PASSPHRASE}+ characters): ")
+    if len(first) < MIN_PASSPHRASE:
+        sys.exit(f"Too short: at least {MIN_PASSPHRASE} characters.")
+    if getpass.getpass("Again: ") != first:
+        sys.exit("The two don't match.")
+    lines = [l for l in (ENV_FILE.read_text().splitlines() if ENV_FILE.exists() else [])
+             if not l.strip().startswith(("LOGIN_HASH=", "LOGIN_PASSPHRASE="))]
+    private_write(ENV_FILE, "\n".join(lines + [f"LOGIN_HASH={hash_passphrase(first)}"]) + "\n")
+    print(f"Saved (only its hash) in {ENV_FILE}. Restart the web version to use it.")
+
+
+def serve() -> None:
+    from urllib.parse import urlparse
+    from mcp.server.transport_security import TransportSecuritySettings
+    from .auth import MIN_PASSPHRASE, public_url
+    cfg = config()
+    if not cfg.get("LOGIN_HASH") and len(cfg.get("LOGIN_PASSPHRASE", "")) < MIN_PASSPHRASE:
+        sys.exit(f"Set a passphrase first: LOGIN_PASSPHRASE ({MIN_PASSPHRASE}+ characters) in your settings, "
+                 f"or run: {APP} set-passphrase")
+    public = public_url(cfg)
+    host = urlparse(public).hostname or "localhost"
+    if not public.startswith("https://") and host not in ("localhost", "127.0.0.1"):
+        sys.exit("PUBLIC_URL must start with https:// : vault passwords are typed on these pages.")
+    if public.startswith("http://"):
+        print(f"Note: PUBLIC_URL isn't set, so only this computer can use it ({public}).", file=sys.stderr)
+    print(f"Control center: {public}/  ·  AI apps connect to: {public}/mcp", file=sys.stderr)
+    try:
+        mcp.run(
+            "streamable-http",
+            host=cfg.get("HOST") or "127.0.0.1",
+            port=int(cfg.get("PORT") or 8767),
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=[host, f"{host}:*", "127.0.0.1:*", "localhost:*"],
+                allowed_origins=[f"https://{host}", "https://claude.ai", "https://claude.com", "https://chatgpt.com",
+                                 "http://localhost:*", "http://127.0.0.1:*"],
+            ),
+        )
+    finally:
+        if _manager:
+            _manager.lock_all("locked: the server stopped")
+
+
 def main() -> None:
-    mode = sys.argv[1] if len(sys.argv) > 1 else "help"
-    if mode == "stdio":
+    mode = MODE
+    if mode == "serve":
+        serve()
+    elif mode == "set-passphrase":
+        set_passphrase()
+    elif mode == "stdio":
         try:
             mcp.run()
         finally:

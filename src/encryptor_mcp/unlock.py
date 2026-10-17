@@ -82,11 +82,33 @@ class UnlockManager:
 
     # ------------------------------------------------------------ helpers
 
-    def spec(self, name: str) -> VaultSpec:
+    def spec(self, name: str, person: bool = False) -> VaultSpec:
+        """A vault by name. Hidden vaults exist only for the person (the control center), never for the AI."""
         v = self.vaults.get((name or "").casefold())
-        if v is None or v.mode == "hidden":
+        if v is None or (v.mode == "hidden" and not person):
             raise UnlockRefused(f"No vault called {name!r}.")
         return v
+
+    def set_vaults(self, vaults: list[VaultSpec]) -> None:
+        """New vault list or modes (from the settings page). A vault that's gone locks; one now read only stays
+        open read only; one now hidden stays open for the person only."""
+        with self.lock_:
+            self.vaults = {v.name.casefold(): v for v in vaults}
+            for key, s in list(self.sessions.items()):
+                v = self.vaults.get(key)
+                if v is None or v.path != s.vault.path:
+                    self.lock(s.vault.name, "locked: removed from the vault list") if v else self._drop(key)
+                    continue
+                s.vault = v
+                if v.mode == "read":
+                    s.read_only = True
+
+    def _drop(self, key: str) -> None:
+        s = self.sessions.pop(key, None)
+        if s:
+            s.key.wipe()
+            self._event(s.vault.name, "locked: removed from the vault list")
+            self._after_lock(s.vault.name)
 
     def _event(self, vault: str, what: str) -> None:
         self.events.append((self.clock(), vault, what))
@@ -107,9 +129,9 @@ class UnlockManager:
 
     # ------------------------------------------------------------ the flow
 
-    def request_unlock(self, vault: str, app: str = "AI app", purpose: str = "") -> str:
+    def request_unlock(self, vault: str, app: str = "AI app", purpose: str = "", person: bool = False) -> str:
         """A one-time code for the unlock page. Carries no secret; works once, for 5 minutes."""
-        v = self.spec(vault)
+        v = self.spec(vault, person)
         with self.lock_:
             now = self.clock()
             self.requests = {c: r for c, r in self.requests.items() if now - r.created < UNLOCK_LINK_TTL and not r.used}
@@ -129,7 +151,7 @@ class UnlockManager:
             r = self.describe(code)
             if r is None:
                 raise UnlockRefused("This unlock link has expired or was already used. Ask the AI to unlock again.")
-            v = self.spec(r.vault)
+            v = self.spec(r.vault, person=True)
             wait = self.locked_out(v.name)
             if wait:
                 raise UnlockRefused(f"Too many wrong passwords. Try again in {math.ceil(wait / 60)} minutes.")
@@ -163,9 +185,9 @@ class UnlockManager:
             self._event(v.name, f"unlocked for {r.app}, keep {keep}" + (", read only" if s.read_only else ""))
             return s
 
-    def use(self, vault: str) -> Session:
+    def use(self, vault: str, person: bool = False) -> Session:
         """The open session for a vault, counting this as activity. Raises Locked if it isn't open."""
-        v = self.spec(vault)
+        v = self.spec(vault, person)
         with self.lock_:
             self.sweep()
             s = self.sessions.get(v.name.casefold())
@@ -174,10 +196,10 @@ class UnlockManager:
             s.last_used = self.clock()
             return s
 
-    def status(self, vault: str) -> Session | None:
+    def status(self, vault: str, person: bool = False) -> Session | None:
         with self.lock_:
             self.sweep()
-            return self.sessions.get(self.spec(vault).name.casefold())
+            return self.sessions.get(self.spec(vault, person).name.casefold())
 
     def by_status_code(self, code: str) -> Session | None:
         with self.lock_:
@@ -186,7 +208,7 @@ class UnlockManager:
 
     def lock(self, vault: str, reason: str = "locked") -> bool:
         with self.lock_:
-            s = self.sessions.pop(self.spec(vault).name.casefold(), None)
+            s = self.sessions.pop(self.spec(vault, person=True).name.casefold(), None)
             if s is None:
                 return False
             s.key.wipe()
