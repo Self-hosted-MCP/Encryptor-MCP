@@ -469,3 +469,22 @@ def test_create_vault_password_and_recovery_on_the_page(local, tmp_path):
     assert m.unlock(m.request_unlock("Private"), "third pass")
     tools = {t.name for t in asyncio.run(server.mcp.list_tools())}
     assert not tools & {"create_vault", "change_password", "show_recovery_key", "reset_password"}   # never via the AI
+
+
+def test_change_a_connected_apps_vaults(hosted, monkeypatch):
+    client, provider, (v1, v2) = hosted
+    monkeypatch.setenv("ENCRYPTOR_VAULTS", f"GCM={v1};Other={v2}")
+    server.refresh()
+    o = {"origin": "http://localhost"}
+    client.post("/signin", data={"passphrase": PASS}, headers=o)
+    provider.clients["c1"] = OAuthClientInformationFull(client_id="c1", client_name="Phone Claude",
+                                                         redirect_uris=[AnyUrl("https://claude.ai/cb")])
+    provider.grants["c1"] = {"vaults": ["GCM"], "change": False}
+    home = client.get("/").text
+    assert "Phone Claude" in home and 'href="/apps/c1"' in home
+    page = client.get("/apps/c1").text
+    csrf = csrf_of(page)
+    r = client.post("/apps/c1", data={"csrf": csrf, "vault": ["GCM", "Other", "Ghost"], "change": "yes"}, headers=o)
+    assert "Saved" in r.text and provider.grants["c1"]["vaults"] == ["GCM", "Other"] and provider.grants["c1"]["change"]
+    monkeypatch.setattr(server, "current_app", lambda: "c1")
+    assert "Other" in server.vaults()

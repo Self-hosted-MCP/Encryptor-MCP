@@ -470,8 +470,9 @@ def center_home(d: dict) -> str:
         for a in d["apps"]:
             items.append(f'<li><div class="main"><div class="name">{esc(a["name"])}</div><div class="meta">'
                          f'{esc(", ".join(a["vaults"]) or "no vaults")} · {"may change files" if a["change"] else "read only"}'
-                         f'</div></div><form method="post" action="/apps/{quote(a["id"])}/disconnect">{_csrf(d["csrf"])}'
-                         f'<button class="btn small plain" type="submit">Disconnect</button></form></li>')
+                         f'</div></div><div class="acts"><a class="btn small plain" href="/apps/{quote(a["id"])}">Choose vaults</a>'
+                         f'<form method="post" action="/apps/{quote(a["id"])}/disconnect">{_csrf(d["csrf"])}'
+                         f'<button class="btn small plain" type="submit">Disconnect</button></form></div></li>')
         apps = ('<section class="card"><h2><span class="mark">Connected AI apps</span></h2>'
                 + (f'<ul class="rows">{"".join(items)}</ul>' if items else
                    '<p class="empty">None yet. Add this server to your AI app as a connector to begin.</p>')
@@ -738,6 +739,21 @@ def _new_password_fields(prefix: str = "") -> str:
             f'<label for="{prefix}np2">New password again</label>'
             f'<input id="{prefix}np2" type="password" name="again" autocomplete="new-password" minlength="8" required>'
             '<p class="note" style="margin-top:0">At least 8 characters. Longer is stronger: a short sentence works well.</p>')
+
+
+def app_access(d: dict) -> str:
+    """Which vaults a connected AI app may ask for, and whether it may change files."""
+    boxes = "".join(f'<label class="check"><input type="checkbox" name="vault" value="{esc(n)}"'
+                    f'{" checked" if n in d["granted"] else ""}><span>{esc(n)}</span></label>' for n in d["vaults"])
+    body = (f'<section class="card">{_msg(d.get("note", ""), ok=True)}<h1><span class="mark">{esc(d["app"])}</span></h1>'
+            f'<form method="post" action="/apps/{quote(d["id"])}">{_csrf(d["csrf"])}'
+            f'<fieldset style="margin-top:0"><legend>Vaults it may ask for</legend>{boxes or "<p class=empty>No vaults yet.</p>"}</fieldset>'
+            + _toggle("change", d["change"], "It may change files (every change can be undone)")
+            + '<div class="actions"><button class="btn" type="submit">Save</button>'
+            '<a class="btn plain" href="/">Back</a></div></form>'
+            '<p class="note">Vaults still need your password each time they open; this only decides what it may ask for.</p>'
+            '</section>')
+    return page(d["app"], body, nav=center_nav(d["csrf"], "/"))
 
 
 def recovery_page(d: dict) -> str:

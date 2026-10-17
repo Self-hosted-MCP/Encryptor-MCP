@@ -353,6 +353,20 @@ class Site:
                     self.mounts.unmount(v.name)
                 m.lock(v.name, "locked on the control center")
                 return 303, {"Location": "/"}, ""
+        if head == "apps" and len(parts) == 2 and c.provider:
+            cid = unquote(parts[1])
+            grant = c.provider.grants.get(cid)
+            if grant is None:
+                return 404, {}, pages.message("Not found", "That app isn't connected.", center=True)
+            names = [v.name for v in m.vaults.values() if v.mode != "hidden"]
+            note = ""
+            if method == "POST":
+                c.provider.set_grant(cid, [n for n in form.get("vault_list", []) if n in names], form.get("change") == "yes")
+                note = "Saved. It applies to the app's next request."
+            grant = c.provider.grants[cid]
+            return 200, {}, pages.app_access({"id": cid, "app": c.provider.app_name(cid), "csrf": sess["csrf"],
+                                              "vaults": names, "granted": grant.get("vaults", []),
+                                              "change": grant.get("change", False), "note": note})
         if head == "apps" and len(parts) == 3 and parts[2] == "disconnect" and method == "POST" and c.provider:
             c.provider.disconnect(unquote(parts[1]))
             return 303, {"Location": "/"}, ""
