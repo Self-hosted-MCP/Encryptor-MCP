@@ -93,8 +93,8 @@ def page_settings() -> dict:
 
 
 def vault_rows(cfg: dict) -> list[dict]:
-    """Every vault: from the settings file first, then the ones added on the control center. The settings file's
-    modes win over the page's."""
+    """Every vault: the setup file's first, then the ones added on the control center. The setup file only gives
+    starting values: whatever the person changes on the page (name, folder, removal, mode, auto-lock) wins."""
     file_modes = {}
     for item in (cfg.get("ENCRYPTOR_MODES") or "").split(","):
         if "=" in item:
@@ -104,22 +104,26 @@ def vault_rows(cfg: dict) -> list[dict]:
     page_modes = {k.casefold(): v for k, v in (page.get("modes") or {}).items() if v in MODE_NAMES}
     page_idle = {k.casefold(): v for k, v in (page.get("vault_idle") or {}).items() if v in IDLE_CHOICES}
     default = str(page.get("default") or "").casefold()
+    overrides = {k.casefold(): v for k, v in (page.get("file_vaults") or {}).items()}   # setup-file vaults changed here
+    removed = {k.casefold() for k in (page.get("removed") or [])}
     rows, seen = [], set()
 
-    def add(name: str, path: str, from_file: bool) -> None:
+    def add(name: str, path: str, from_file: bool, orig: str = "") -> None:
         key = name.casefold()
         if not name or not path or key in seen:
             return
         seen.add(key)
-        fixed = key in file_modes
-        rows.append({"name": name, "path": str(Path(path).expanduser()), "from_file": from_file, "mode_fixed": fixed,
-                     "mode": file_modes[key] if fixed else page_modes.get(key, "full"),
-                     "idle": page_idle.get(key), "default": key == default})
+        mode = page_modes.get(key) or file_modes.get((orig or name).casefold()) or "full"
+        rows.append({"name": name, "path": str(Path(path).expanduser()), "from_file": from_file, "orig": orig or name,
+                     "mode_fixed": False, "mode": mode, "idle": page_idle.get(key), "default": key == default})
 
     for item in (cfg.get("ENCRYPTOR_VAULTS") or "").split(";"):
         if "=" in item:
-            name, path = item.split("=", 1)
-            add(name.strip(), path.strip(), True)
+            name, path = (s.strip() for s in item.split("=", 1))
+            if name.casefold() in removed:
+                continue
+            ov = overrides.get(name.casefold(), {})
+            add(str(ov.get("name") or name), str(ov.get("path") or path), True, name)
     for v in page.get("vaults") or []:
         add(str(v.get("name", "")).strip(), str(v.get("path", "")).strip(), False)
     return rows
@@ -163,7 +167,8 @@ def update_status(force: bool = False) -> dict:
 
 
 def idle_minutes(cfg: dict) -> float:
-    return float(cfg.get("ENCRYPTOR_IDLE_MINUTES") or page_settings().get("idle_minutes") or 10)
+    """The page's choice wins; the setup file's ENCRYPTOR_IDLE_MINUTES is only the starting value."""
+    return float(page_settings().get("idle_minutes") or cfg.get("ENCRYPTOR_IDLE_MINUTES") or 10)
 
 
 def refresh() -> None:
@@ -180,7 +185,7 @@ def settings_view() -> dict:
     upd = update_status()
     newer = bool(upd.get("latest")) and _newer(upd["latest"], current_version())
     return {"vaults": vault_rows(cfg), "idle_minutes": int(idle_minutes(cfg)),
-            "idle_fixed": bool(cfg.get("ENCRYPTOR_IDLE_MINUTES")),
+            "idle_fixed": False,
             "read_only_all": read_only_all(cfg), "read_only_fixed": bool(cfg.get("ENCRYPTOR_READ_ONLY")),
             "allow_purge": allow_purge(), "update_check": bool(page.get("update_check")),
             "version": current_version(), "update": {**upd, "newer": newer}, "repo": REPO,
@@ -203,8 +208,6 @@ def settings_save(kind: str, form: dict) -> str:
         row = rows.get(name.casefold())
         if row is None:
             raise ValueError(f"No vault called {name!r}.")
-        if row["mode_fixed"]:
-            raise ValueError(f"{row['name']}'s mode is set in the setup file, which wins over this page.")
         mode = form.get("mode", "")
         if mode not in MODE_NAMES:
             raise ValueError("Choose what the AI may do.")
@@ -229,16 +232,22 @@ def settings_save(kind: str, form: dict) -> str:
         note = f"Added {name}."
     elif kind == "remove":
         row = rows.get(name.casefold())
-        if row is None or row["from_file"]:
-            raise ValueError("Only vaults added here can be removed here.")
+        if row is None:
+            raise ValueError(f"No vault called {name!r}.")
+        if row["from_file"]:
+            page.setdefault("removed", []).append(row["orig"])
+            (page.get("file_vaults") or {}).pop(row["orig"], None)
         page["vaults"] = [v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() != name.casefold()]
         (page.get("modes") or {}).pop(row["name"], None)
         note = f"Removed {row['name']} from the list. Its files weren't touched."
     elif kind in ("rename", "path"):
         row = rows.get(name.casefold())
-        if row is None or row["from_file"]:
-            raise ValueError("Only vaults added here can be changed here; the others come from the setup file.")
-        entry = next(v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() == name.casefold())
+        if row is None:
+            raise ValueError(f"No vault called {name!r}.")
+        if row["from_file"]:   # a setup-file vault: remember the change here, the file stays as it is
+            entry = page.setdefault("file_vaults", {}).setdefault(row["orig"], {})
+        else:
+            entry = next(v for v in page.get("vaults", []) if str(v.get("name", "")).casefold() == name.casefold())
         if kind == "rename":
             new = (form.get("new_name") or "").strip()
             if not new or len(new) > 60 or any(c in new for c in ";=,/\\"):
@@ -306,8 +315,6 @@ def settings_save(kind: str, form: dict) -> str:
         return (f"Version {upd['latest']} is available." if _newer(upd.get("latest", "0"), current_version())
                 else "You have the newest version.")
     elif kind == "idle":
-        if cfg.get("ENCRYPTOR_IDLE_MINUTES"):
-            raise ValueError("Auto-lock is set in the setup file, which wins over this page.")
         try:
             minutes = int(form.get("idle", ""))
         except ValueError:

@@ -139,20 +139,33 @@ def test_settings_add_mode_remove_idle(local):
     assert "Spare" not in server.vaults() and "Spare" in client.get("/").text   # hidden from the AI, not from you
     client.post("/settings", data={"csrf": csrf, "kind": "mode", "name": "Spare", "mode": "read"}, headers=o)
     assert "Spare: locked (read only)" in server.vaults()
-    r = client.post("/settings", data={"csrf": csrf, "kind": "remove", "name": "GCM"}, headers=o)
-    assert "Only vaults added here" in r.text                       # the settings file's vaults stay
     client.post("/settings", data={"csrf": csrf, "kind": "remove", "name": "Spare"}, headers=o)
     assert "Spare" not in server.vaults() and (v2 / "vault.cryptomator").exists()
     client.post("/settings", data={"csrf": csrf, "kind": "idle", "idle": "30"}, headers=o)
     assert server.manager().idle == 30 * 60
 
 
-def test_file_settings_win(local, monkeypatch):
-    client, lp, _ = local
+def test_setup_file_vaults_are_editable_on_the_page(local, monkeypatch):
+    """The setup file only gives starting values; the page changes every vault, and the file is never edited."""
+    client, lp, (v1, v2) = local
     monkeypatch.setenv("ENCRYPTOR_MODES", "GCM=read")
+    monkeypatch.setenv("ENCRYPTOR_IDLE_MINUTES", "5")
     csrf = signed_in(client, lp)
-    r = client.post("/settings", data={"csrf": csrf, "kind": "mode", "name": "GCM", "mode": "full"}, headers={"origin": lp.base})
-    assert "setup file, which wins" in r.text
+    o = {"origin": lp.base}
+    assert "GCM: locked (read only)" in server.vaults()               # the file's starting value
+    client.post("/settings", data={"csrf": csrf, "kind": "mode", "name": "GCM", "mode": "full"}, headers=o)
+    assert "GCM: locked\n" in server.vaults() + "\n" and "read only" not in server.vaults()
+    client.post("/settings", data={"csrf": csrf, "kind": "idle", "idle": "30"}, headers=o)
+    assert server.manager().idle == 30 * 60
+    r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "Main"}, headers=o)
+    assert "Renamed GCM to Main" in r.text and "Main: locked" in server.vaults()
+    r = client.post("/settings/vault/Main", data={"csrf": csrf, "kind": "path", "path": str(v2)}, headers=o)
+    assert "points at the new folder" in r.text
+    m = server.manager()
+    assert m.unlock(m.request_unlock("Main"), "test-password-SIV_CTRMAC")   # now the CTR vault
+    r = client.post("/settings/vault/Main", data={"csrf": csrf, "kind": "remove", "confirm": "yes"}, headers=o)
+    assert "Removed Main" in r.text and server.vaults().startswith("No vaults yet")
+    assert not server.ENV_FILE.exists() or "Main" not in server.ENV_FILE.read_text()
 
 
 def test_vault_page_record_undo_and_purge(local):
@@ -288,7 +301,7 @@ def test_per_vault_settings_page(local):
     home = client.get("/").text
     assert 'href="/settings/vault/GCM"' in home and 'href="/settings#add"' in home
     page = client.get("/settings/vault/GCM").text
-    assert "Cryptomator vault format 8, SIV_GCM" in page and "Locked" in page and "added in the setup file" in page
+    assert "Cryptomator vault format 8, SIV_GCM" in page and "Locked" in page and "Remove from the list" in page
     client.post("/settings", data={"csrf": csrf, "kind": "add", "name": "Spare", "path": str(v2)}, headers=o)
     page = client.get("/settings/vault/Spare").text
     assert "SIV_CTRMAC" in page and "Remove from the list" in page
@@ -348,7 +361,7 @@ def test_rename_move_own_autolock_and_default(local):
     r = client.post("/settings/vault/Archive", data={"csrf": csrf, "kind": "path", "path": str(v1.parent / "nope")}, headers=o)
     assert r.status_code == 400 and "no vault.cryptomator" in r.text
     r = client.post("/settings/vault/GCM", data={"csrf": csrf, "kind": "rename", "new_name": "X"}, headers=o)
-    assert "setup file" in r.text
+    assert "Renamed GCM to X" in r.text
 
 
 def test_devices_and_sign_in_log(hosted):
