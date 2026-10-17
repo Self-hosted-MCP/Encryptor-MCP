@@ -6,5 +6,5 @@ authors:
   - alias: "s17sh70x2jfl031ag"
 repository-code: "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP"
 license: AGPL-3.0-only
-version: 0.1.1
+version: 0.1.2
 keywords: [mcp, cryptomator, encryption, vault, self-hosted]

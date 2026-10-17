@@ -38,17 +38,24 @@ Vaults from the extension's **Vaults** field show up there too.
 
 Ask something like *"What's in my Taxes vault?"*. The vault is locked, so Claude asks to unlock it:
 
-1. A page opens in your browser. It says which vault, and why Claude wants it.
-2. You type the vault password there, and choose how long the vault stays open: **15 minutes**, **1 hour**, **Until I lock it** or **Until the AI app closes**.
-3. Press **Unlock**. Claude carries on.
-
-On a Mac, if the page can't open, a password box shows instead. Either way the password stays on your computer: Claude never sees it, and it never goes through the chat. The keys are kept only in memory, and are wiped when the vault locks or Claude Desktop closes.
+- **On a Mac,** a password box shows, saying which vault and why Claude wants it. Type the vault password and press OK. Claude carries on.
+- **On Windows and Linux,** Claude gives you a link. Open it, type the password on that page, choose how long the vault stays open (**15 minutes**, **1 hour**, **Until I lock it** or **Until the AI app closes**), press **Unlock**, and tell Claude it's done. Either way the password stays on your computer: Claude never sees it, and it never goes through the chat. The keys are kept only in memory, and are wiped when the vault locks or Claude Desktop closes.
 
 ## What you get
 
 All 23 tools ([tools.md](tools.md)): list, read, find, write, move, copy, trash, undo, versions, and the health check. Every change is logged and keeps what it replaced. Ask *"what did you change today?"* or *"undo that"*. Deleting for good only happens when you empty the trash, and you approve that yourself, outside the chat.
 
 When every vault is **Read only** or **Hidden from AI**, the tools that change files are left out, so Claude shows fewer tools. After changing a mode to or from read only, restart Claude Desktop.
+
+## Fewer permission clicks
+
+Claude asks before it uses each tool. Only you can change that: Encryptor can't allow itself. Click **Always allow** the first time a tool asks, and Claude stops asking for that one. Or set them all at once in Claude's settings, under the extension's tools.
+
+A sensible choice:
+
+- **Always allow** the tools that only read: `vaults`, `list_folder`, `find`, `read_file`, `file_info`, `recent_changes`, `versions`, `trash_list`, `health_check`, `locate`, `decrypt_name`.
+- **Always allow** the ones that change files too, if you're comfortable: every change can be undone.
+- Deleting for good (`empty_trash`) still asks you in its own box, whatever you choose here.
 
 ## Change the settings
 
@@ -122,5 +129,5 @@ The `.mcpb` file is a zip of this project plus [`extension/manifest.json`](../ex
 |---|---|
 | The file builds and passes Anthropic's own checker (`mcpb validate`) | Yes |
 | Encryptor itself, over stdio, with the official MCP Python client | Yes (macOS, automated tests) |
-| Installing it in Claude Desktop, the form, the tools loading | Not yet |
+| Installing it in Claude Desktop, the tools loading, unlocking with the Mac password box, reading, writing, undo, trash, health check, lock | Yes (macOS, 2026-10-17) |
 | Windows and Linux | Not yet |

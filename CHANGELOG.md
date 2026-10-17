@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 (2026-10-17)
+
+- Unlocking works in apps that say they can open the unlock page but can't: Encryptor falls back to the Mac password box or a link.
+- A vault folder given without a name (like the Claude Desktop extension's setting) is named after the folder; it used to be skipped.
+- `encryptor-mcp check` no longer crashes on a server.
+- AI apps get a full guide on how to work with vaults when they connect, and a short next-step hint from `vaults`.
+- `undo` names the change it undid; `append_file` says the text is added exactly as given.
+- Docs: Docker Compose and the Claude Desktop extension tested by hand, fewer permission clicks, commands in Docker with `run --rm`.
+
 ## 0.1.1 (2026-10-16)
 
 - On a hosting company, new vaults are suggested in `/data/vaults`, on the disk that survives restarts.
