@@ -385,7 +385,7 @@ def add_page_routes(server: MCPServer, site) -> None:
         return Response(body, status_code=status,
                         headers={**page_html.HEADERS, "Content-Type": "text/html; charset=utf-8", **extra})
 
-    for path in ("/", "/theme", "/signin", "/signin/{code}", "/signout", "/settings", "/login", "/vaults/{rest:path}",
+    for path in ("/", "/theme", "/signin", "/signin/{code}", "/signout", "/settings", "/settings/{rest:path}", "/login", "/vaults/{rest:path}",
                  "/apps/{rest:path}", "/unlock/{code}", "/vault/{rest:path}"):
         server.custom_route(path, methods=["GET", "POST"])(serve_page)
 

@@ -279,3 +279,23 @@ def test_light_by_default_and_a_switch(local):
     assert '<html lang="en" data-theme=dark>' in page and "Switch to light mode" in page
     r = client.post("/theme", data={"next": "//evil.example/x"}, headers={"origin": lp.base}, follow_redirects=False)
     assert r.headers["location"] == "/" and "theme=light" in r.headers["set-cookie"]
+
+
+def test_per_vault_settings_page(local):
+    client, lp, (v1, v2) = local
+    csrf = signed_in(client, lp)
+    o = {"origin": lp.base}
+    home = client.get("/").text
+    assert 'href="/settings/vault/GCM"' in home and 'href="/settings#add"' in home
+    page = client.get("/settings/vault/GCM").text
+    assert "Cryptomator vault format 8, SIV_GCM" in page and "Locked" in page and "only be removed there" in page
+    client.post("/settings", data={"csrf": csrf, "kind": "add", "name": "Spare", "path": str(v2)}, headers=o)
+    page = client.get("/settings/vault/Spare").text
+    assert "SIV_CTRMAC" in page and "Remove from the list" in page
+    r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "mode", "mode": "read"}, headers=o)
+    assert "read only" in r.text.lower() and "Spare: locked (read only)" in server.vaults()
+    r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove"}, headers=o)
+    assert r.status_code == 400 and "Tick the box" in r.text
+    r = client.post("/settings/vault/Spare", data={"csrf": csrf, "kind": "remove", "confirm": "yes"}, headers=o)
+    assert "Removed Spare" in r.text and "Spare" not in server.vaults()
+    assert client.get("/settings/vault/Nope").status_code == 404

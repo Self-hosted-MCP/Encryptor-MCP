@@ -137,7 +137,7 @@ legend{font-weight:600;padding:0;margin:0;line-height:28px}
 .rows .main{flex:1;min-width:0}
 .rows .name{font-weight:650;overflow-wrap:anywhere;line-height:28px}
 .rows .meta{color:var(--ink-2);font-size:.8125rem;line-height:28px;overflow-wrap:anywhere}
-.rows .meta.path{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rows .meta.path,.facts .path{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rows .meta b{color:var(--stamp);font-weight:650}
 .rows .acts{display:flex;gap:8px;flex:none;align-items:center}
 .rows .acts form{margin:0}
@@ -174,7 +174,7 @@ summary{cursor:pointer;font-weight:600;color:var(--red);width:max-content;max-wi
   .actions .btn{flex:1 1 auto}
   .rows li{flex-wrap:wrap}
   .rows .main{flex:1 1 170px}
-  .rows .acts{margin-left:auto;padding-bottom:20px}
+  .rows .acts{margin-left:auto;padding-bottom:20px;flex-wrap:wrap;justify-content:flex-end;row-gap:10px}
   .inline{flex-wrap:wrap}
   .record,.record tbody,.record tr,.record td{display:block;width:auto}
   .record tr{position:relative;box-shadow:inset 0 -1px 0 var(--rule)}
@@ -395,6 +395,7 @@ def center_home(d: dict) -> str:
             meta = f'<span class="dot"></span>Locked{tag}'
             act = (f'<form method="post" action="/vaults/{quote(v["name"])}/unlock">{_csrf(d["csrf"])}'
                    f'<button class="btn small" type="submit">Unlock</button></form>')
+        act += f'<a class="btn small plain" href="/settings/vault/{quote(v["name"])}" aria-label="Settings for {name}">Settings</a>'
         rows.append(f'<li><div class="main"><div class="name">{name}</div><div class="meta">{meta}</div></div>'
                     f'<div class="acts">{act}</div></li>')
     vaults = (f'<ul class="rows">{"".join(rows)}</ul>' if rows else
@@ -412,48 +413,77 @@ def center_home(d: dict) -> str:
                 + (f'<ul class="rows">{"".join(items)}</ul>' if items else
                    '<p class="empty">None yet. Add this server to your AI app as a connector to begin.</p>')
                 + "</section>")
-    body = (f'<section class="card">{_msg(d["note"])}<h1><span class="mark">Your vaults</span></h1>{vaults}'
+    add = '<div class="actions"><a class="btn plain" href="/settings#add">Add a vault</a></div>' if rows else ""
+    body = (f'<section class="card">{_msg(d["note"])}<h1><span class="mark">Your vaults</span></h1>{vaults}{add}'
             '<p class="note">Your AI app asks for a vault when it needs one. You can also open and lock them here.</p>'
             f'</section>{apps}')
     return page("Your vaults", body, wide=True, nav=center_nav(d["csrf"], "/"))
 
 
+def _mode_form(v: dict, csrf: str, action: str) -> str:
+    opts = "".join(f'<option value="{m}"{" selected" if m == v["mode"] else ""}>{t}</option>' for m, t in MODES)
+    if v["mode_fixed"]:
+        return f'<p class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))}, set in the settings file.</p>'
+    return (f'<form method="post" action="{action}" class="inline">{_csrf(csrf)}'
+            f'<input type="hidden" name="kind" value="mode"><input type="hidden" name="name" value="{esc(v["name"])}">'
+            f'<select name="mode" aria-label="What the AI may do with {esc(v["name"])}">{opts}</select>'
+            f'<button class="btn small plain" type="submit">Save</button></form>')
+
+
 def settings(d: dict) -> str:
     rows = []
     for v in d["vaults"]:
-        opts = "".join(f'<option value="{m}"{" selected" if m == v["mode"] else ""}>{t}</option>' for m, t in MODES)
-        mode = (f'<span class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))} (settings file)</span>'
-                if v["mode_fixed"] else
-                f'<form method="post" action="/settings" class="inline">{_csrf(d["csrf"])}'
-                f'<input type="hidden" name="kind" value="mode"><input type="hidden" name="name" value="{esc(v["name"])}">'
-                f'<select name="mode" aria-label="What the AI may do with {esc(v["name"])}">{opts}</select>'
-                f'<button class="btn small plain" type="submit">Save</button></form>')
-        remove = ("" if v["from_file"] else
-                  f'<form method="post" action="/settings">{_csrf(d["csrf"])}'
-                  f'<input type="hidden" name="kind" value="remove"><input type="hidden" name="name" value="{esc(v["name"])}">'
-                  f'<button class="link" type="submit" aria-label="Remove {esc(v["name"])} from the list">Remove</button></form>')
-        rows.append(f'<li><div class="main"><div class="name">{esc(v["name"])}</div><div class="meta path" title="{esc(v["path"])}">{esc(home(v["path"]))}'
-                    f'</div></div><div class="acts">{mode}{remove}</div></li>')
+        rows.append(f'<li><div class="main"><div class="name">{esc(v["name"])}</div>'
+                    f'<div class="meta">{esc(dict(MODES).get(v["mode"], v["mode"]))}</div></div>'
+                    f'<div class="acts"><a class="btn small plain" href="/settings/vault/{quote(v["name"])}">Settings</a></div></li>')
     idle_opts = "".join(f'<option value="{n}"{" selected" if n == d["idle_minutes"] else ""}>{n} minutes</option>'
                         for n in (5, 10, 15, 30, 60))
     mode_opts = "".join(f'<option value="{m}">{t}</option>' for m, t in MODES)
-    body = (f'<section class="card">{_msg(d["error"])}{_msg(d["note"], ok=True)}<h1><span class="mark">Settings</span></h1>'
-            '<h2><span class="mark">Vaults</span></h2>'
-            + (f'<ul class="rows">{"".join(rows)}</ul>' if rows else '<p class="empty">No vaults yet.</p>')
-            + f'<h2><span class="mark">Add a vault</span></h2><form method="post" action="/settings">{_csrf(d["csrf"])}'
-            '<input type="hidden" name="kind" value="add">'
-            '<label for="vn">Name</label><input id="vn" type="text" name="name" required maxlength="60" placeholder="Taxes">'
-            '<label for="vp">Vault folder</label><input id="vp" type="text" name="path" required '
-            f'placeholder="{"/data/vaults/Taxes" if d["hosted"] else "~/Nextcloud/Taxes"}">'
-            '<p class="note" style="margin-top:6px">The folder that holds vault.cryptomator. Nothing is copied or moved.</p>'
-            f'<label for="vm">The AI may</label><select id="vm" name="mode">{mode_opts}</select>'
-            '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form>'
-            f'<h2><span class="mark">Auto-lock</span></h2><form method="post" action="/settings">{_csrf(d["csrf"])}'
-            '<input type="hidden" name="kind" value="idle">'
+    idle = (f'<p class="meta">{d["idle_minutes"]} minutes, set in the settings file.</p>' if d.get("idle_fixed") else
+            f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="idle">'
             '<label for="idle" style="margin-top:0">Lock a vault after this long without use</label>'
             f'<div class="inline"><select id="idle" name="idle">{idle_opts}</select>'
-            '<button class="btn plain" type="submit">Save</button></div></form></section>')
+            '<button class="btn plain" type="submit">Save</button></div></form>')
+    body = (f'{_msg(d["error"])}{_msg(d["note"], ok=True)}'
+            '<section class="card"><h1><span class="mark">Settings</span></h1>'
+            '<h2><span class="mark">Vaults</span></h2>'
+            + (f'<ul class="rows">{"".join(rows)}</ul>' if rows else '<p class="empty">No vaults yet.</p>')
+            + '</section>'
+            f'<section class="card" id="add"><h2><span class="mark">Add a vault</span></h2>'
+            f'<form method="post" action="/settings">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="add">'
+            '<label for="vn" style="margin-top:0">Name</label>'
+            '<input id="vn" type="text" name="name" required maxlength="60" placeholder="Taxes">'
+            '<label for="vp">Vault folder</label><input id="vp" type="text" name="path" required '
+            f'placeholder="{"/data/vaults/Taxes" if d["hosted"] else "~/Nextcloud/Taxes"}">'
+            '<p class="note" style="margin-top:0">The folder that holds vault.cryptomator. Nothing is copied or moved.</p>'
+            f'<label for="vm">The AI may</label><select id="vm" name="mode">{mode_opts}</select>'
+            '<div class="actions"><button class="btn" type="submit">Add vault</button></div></form></section>'
+            f'<section class="card"><h2><span class="mark">Auto-lock</span></h2>{idle}</section>')
     return page("Settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
+
+
+def vault_settings(d: dict) -> str:
+    """One vault's settings: where it is, its format, what the AI may do, and removing it from the list."""
+    v = d["vault"]
+    action = f'/settings/vault/{quote(v["name"])}'
+    status = (f'Open, lent to {esc(d["app"])}. <a class="link" href="/vault/{esc(d["status_code"])}">Go to its page</a>'
+              if d["open"] else "Locked")
+    remove = ('<p class="meta">This vault is listed in the settings file, so it can only be removed there.</p>'
+              if v["from_file"] else
+              f'<form method="post" action="{action}">{_csrf(d["csrf"])}<input type="hidden" name="kind" value="remove">'
+              f'<input type="hidden" name="name" value="{esc(v["name"])}">'
+              '<label class="check"><input type="checkbox" name="confirm" value="yes" required>'
+              '<span>Remove it from this list. The vault and its files stay where they are.</span></label>'
+              '<div class="actions"><button class="btn plain" type="submit">Remove from the list</button></div></form>')
+    body = (f'{_msg(d["error"])}{_msg(d["note"], ok=True)}'
+            f'<section class="card"><h1><span class="mark">{esc(v["name"])}</span></h1>'
+            f'<dl class="facts"><dt>Status</dt><dd>{status}</dd>'
+            f'<dt>Folder</dt><dd class="path" title="{esc(v["path"])}">{esc(home(v["path"]))}</dd>'
+            f'<dt>Format</dt><dd>{esc(d["format"])}</dd></dl>'
+            f'<h2><span class="mark">The AI may</span></h2>{_mode_form(v, d["csrf"], action)}'
+            '<p class="note" style="margin-top:0">Hidden vaults never show to the AI; you can still open them here.</p>'
+            f'<h2><span class="mark">Remove</span></h2>{remove}</section>')
+    return page(f"{v['name']} settings", body, wide=True, nav=center_nav(d["csrf"], "/settings"))
 
 
 def signin(hosted: bool, error: str = "") -> str:

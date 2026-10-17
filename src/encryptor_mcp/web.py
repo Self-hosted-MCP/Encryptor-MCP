@@ -20,6 +20,7 @@ import hmac
 import mimetypes
 import threading
 import time
+from pathlib import Path
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -278,6 +279,8 @@ class Site:
         if head == "apps" and len(parts) == 3 and parts[2] == "disconnect" and method == "POST" and c.provider:
             c.provider.disconnect(unquote(parts[1]))
             return 303, {"Location": "/"}, ""
+        if head == "settings" and len(parts) == 3 and parts[1] == "vault":
+            return self.vault_settings(method, unquote(parts[2]), form, sess)
         if head == "settings":
             note, error = "", ""
             if method == "POST":
@@ -288,6 +291,37 @@ class Site:
             return (400 if error else 200), {}, pages.settings({**c.view(), "csrf": sess["csrf"], "note": note,
                                                                  "error": error, "hosted": c.hosted})
         return 404, {}, pages.message("Not found", "There's nothing here.")
+
+    def vault_settings(self, method: str, name: str, form: dict, sess: dict):
+        c, m = self.center, self.manager
+        note, error = "", ""
+        if method == "POST":
+            kind = form.get("kind", "")
+            if kind == "remove" and form.get("confirm") != "yes":
+                error = "Tick the box to confirm."
+            else:
+                try:
+                    note = c.save(kind, {**form, "name": name})
+                except ValueError as exc:
+                    error = str(exc)
+                if kind == "remove" and not error:
+                    if self.mounts:
+                        self.mounts.unmount(name)
+                    return 200, {}, pages.settings({**c.view(), "csrf": sess["csrf"], "note": note, "error": "",
+                                                     "hosted": c.hosted})
+        row = next((v for v in c.view()["vaults"] if v["name"].casefold() == name.casefold()), None)
+        if row is None:
+            return 404, {}, pages.message("Not found", f"No vault called {name!r}.", center=True)
+        s = m.sessions.get(row["name"].casefold())
+        try:
+            from .vault import keys as _keys
+            cfg = _keys.read_vault_config_unverified(Path(row["path"], "vault.cryptomator").read_bytes())[0]
+            fmt = f"Cryptomator vault format 8, {cfg.cipher_combo}"
+        except Exception:
+            fmt = "Unreadable here (is the folder still there?)"
+        return (400 if error else 200), {}, pages.vault_settings({
+            "vault": row, "csrf": sess["csrf"], "note": note, "error": error, "open": s is not None,
+            "app": s.app if s else "", "status_code": s.status_code if s else "", "format": fmt})
 
     # ------------------------------------------------ AI-app login (a server only)
 
