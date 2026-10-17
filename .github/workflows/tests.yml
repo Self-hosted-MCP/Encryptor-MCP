@@ -4,9 +4,9 @@
 # Cryptomator on every system.
 name: Tests
 
+# Started by hand only (Actions tab > Tests > Run workflow), e.g. before a release: while the repository is private,
+# every run is billed, and macOS minutes count ten times. The tests run locally on every change anyway.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:
