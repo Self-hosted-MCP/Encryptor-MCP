@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/a682dbe5-bec8-4c03-af99-07ef7fa1f529
 
 <p align="center">
 <a href="#credits"><img src="https://img.shields.io/badge/-open%20source-brightgreen" alt="Open source"></a>
-<a href="https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/stargazers"><img src="https://img.shields.io/github/stars/s17sh70x2jfl031ag/Encryptor-MCP?style=flat" alt="GitHub stars"></a>
+<a href="https://github.com/Self-hosted-MCP/Encryptor-MCP/stargazers"><img src="https://img.shields.io/github/stars/Self-hosted-MCP/Encryptor-MCP?style=flat" alt="GitHub stars"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
 <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
 <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-server-black" alt="MCP server"></a>
@@ -17,9 +17,9 @@ https://github.com/user-attachments/assets/a682dbe5-bec8-4c03-af99-07ef7fa1f529
 </p>
 
 <p align="center">
-<a href="https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/actions/workflows/tests.yml"><img src="https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
-<a href="https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest"><img src="https://img.shields.io/github/v/release/s17sh70x2jfl031ag/Encryptor-MCP" alt="Latest release"></a>
-<a href="https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/commits/main"><img src="https://img.shields.io/github/last-commit/s17sh70x2jfl031ag/Encryptor-MCP" alt="Last commit"></a>
+<a href="https://github.com/Self-hosted-MCP/Encryptor-MCP/actions/workflows/tests.yml"><img src="https://github.com/Self-hosted-MCP/Encryptor-MCP/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+<a href="https://github.com/Self-hosted-MCP/Encryptor-MCP/releases/latest"><img src="https://img.shields.io/github/v/release/Self-hosted-MCP/Encryptor-MCP" alt="Latest release"></a>
+<a href="https://github.com/Self-hosted-MCP/Encryptor-MCP/commits/main"><img src="https://img.shields.io/github/last-commit/Self-hosted-MCP/Encryptor-MCP" alt="Last commit"></a>
 <a href="docs/where-your-vaults-live.md"><img src="https://img.shields.io/badge/Cryptomator%20vaults-format%208-4b3a8f" alt="Cryptomator vaults, format 8"></a>
 <a href="docs/claude-desktop-extension.md"><img src="https://img.shields.io/badge/Claude%20Desktop-extension-d97757" alt="Claude Desktop extension"></a>
 </p>
@@ -121,7 +121,7 @@ More in [docs/how-it-works.md](docs/how-it-works.md).
 
 On a computer, vaults can be in any folder it can reach. On a server, the vault folders must be on that server, or reached through rclone. On a hosting company, they live on its disk ([where-your-vaults-live.md](docs/where-your-vaults-live.md)).
 
-<a href="https://railway.com/deploy/encryptor-mcp"><img src="https://railway.com/button.svg" alt="Deploy on Railway"></a> <a href="https://render.com/deploy?repo=https://github.com/s17sh70x2jfl031ag/Encryptor-MCP"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"></a>
+<a href="https://railway.com/deploy/encryptor-mcp"><img src="https://railway.com/button.svg" alt="Deploy on Railway"></a> <a href="https://render.com/deploy?repo=https://github.com/Self-hosted-MCP/Encryptor-MCP"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"></a>
 
 > [!CAUTION]
 > On a hosting company, an open vault's keys live in that company's memory. Read [setup-hosting.md](docs/setup-hosting.md) first, and prefer your own computer or server when you can.
@@ -160,7 +160,7 @@ All 23 tools: [docs/tools.md](docs/tools.md). Ideas for what to ask: [docs/examp
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), a small free tool that installs Python programs. Then install Encryptor MCP:
 
    ```bash
-   uv tool install git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP
+   uv tool install git+https://github.com/Self-hosted-MCP/Encryptor-MCP
    ```
 
 2. Add it to your AI app. For example Claude Code:
@@ -172,7 +172,7 @@ All 23 tools: [docs/tools.md](docs/tools.md). Ideas for what to ask: [docs/examp
    Or install the Claude Code plugin instead of steps 1 and 2 (it needs uv):
 
    ```
-   /plugin marketplace add s17sh70x2jfl031ag/Encryptor-MCP
+   /plugin marketplace add Self-hosted-MCP/Encryptor-MCP
    ```
 
    ```
@@ -240,9 +240,9 @@ Your own page for your vaults: unlock and lock, browse files, the record of chan
 | You want to | Go to |
 |---|---|
 | Fix a problem yourself | [Troubleshooting](docs/troubleshooting.md) |
-| Report a bug | [Something doesn't work](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new?template=bug_report.yml) |
-| Ask a question or share an idea | [Question or idea](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new?template=question.yml) |
-| Report a security problem, privately | [Private report](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/security/advisories/new) ([SECURITY.md](SECURITY.md)) |
+| Report a bug | [Something doesn't work](https://github.com/Self-hosted-MCP/Encryptor-MCP/issues/new?template=bug_report.yml) |
+| Ask a question or share an idea | [Question or idea](https://github.com/Self-hosted-MCP/Encryptor-MCP/issues/new?template=question.yml) |
+| Report a security problem, privately | [Private report](https://github.com/Self-hosted-MCP/Encryptor-MCP/security/advisories/new) ([SECURITY.md](SECURITY.md)) |
 
 Issues are public, so leave out passwords, recovery keys and file names.
 
@@ -250,7 +250,7 @@ Issues are public, so leave out passwords, recovery keys and file names.
 
 <p align="center"><img src="docs/images/open-source.png" alt="Open source, run by you: public code under AGPL-3.0, runs on your computer or server, vaults stay in Cryptomator's format, nothing collected" width="640"></p>
 
-Encryptor MCP was made by [s17sh70x2jfl031ag](https://github.com/s17sh70x2jfl031ag). Cryptomator is a trademark of Skymatic GmbH; this project isn't made by or affiliated with them.
+Encryptor MCP was made by [Self-hosted MCP](https://github.com/Self-hosted-MCP). Cryptomator is a trademark of Skymatic GmbH; this project isn't made by or affiliated with them.
 
 You're welcome to use, fork, change and build on it under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only) and the notices in [NOTICE](NOTICE). In short:
 

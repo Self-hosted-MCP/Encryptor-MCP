@@ -6,15 +6,15 @@
   "description": "Open Cryptomator vaults from Claude: read and write files with the vault's own keys. You unlock vaults yourself on a page in your browser, the password never goes through the chat. Every change can be undone.",
   "long_description": "Open your Cryptomator vaults from Claude Desktop. Claude reads and writes files with the vault's own keys, so they stay encrypted on disk and work in Cryptomator as before.\n\n**You unlock vaults yourself:** when Claude needs a locked vault, a page opens in your browser and you type the password there (on a Mac, a password box can show instead). The password never goes through the chat, and you choose how long the vault stays open. Keys are kept only in memory.\n\nEvery change Claude makes can be undone. Deleting for good only happens when you empty the trash and approve it yourself.\n\nWorks with Cryptomator vaults. Not made by or affiliated with Cryptomator.",
   "author": {
-    "name": "s17sh70x2jfl031ag",
-    "url": "https://github.com/s17sh70x2jfl031ag"
+    "name": "Self-hosted MCP",
+    "url": "https://github.com/Self-hosted-MCP"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP.git"
+    "url": "https://github.com/Self-hosted-MCP/Encryptor-MCP.git"
   },
-  "homepage": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP",
-  "support": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues",
+  "homepage": "https://github.com/Self-hosted-MCP/Encryptor-MCP",
+  "support": "https://github.com/Self-hosted-MCP/Encryptor-MCP/issues",
   "server": {
     "type": "uv",
     "entry_point": "src/encryptor_mcp/__main__.py",

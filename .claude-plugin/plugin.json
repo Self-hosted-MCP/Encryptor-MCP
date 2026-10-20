@@ -1,16 +1,16 @@
 {
   "name": "encryptor-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Open your Cryptomator vaults from Claude Code. You unlock each vault yourself in your browser; the password never goes through the chat, keys stay in memory, and every change the AI makes can be undone. Works with Cryptomator vaults; not made by or affiliated with Cryptomator.",
-  "author": { "name": "s17sh70x2jfl031ag", "url": "https://github.com/s17sh70x2jfl031ag" },
-  "homepage": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP",
-  "repository": "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP",
+  "author": { "name": "Self-hosted MCP", "url": "https://github.com/Self-hosted-MCP" },
+  "homepage": "https://github.com/Self-hosted-MCP/Encryptor-MCP",
+  "repository": "https://github.com/Self-hosted-MCP/Encryptor-MCP",
   "license": "AGPL-3.0-only",
   "keywords": ["mcp", "cryptomator", "encryption", "vault", "files"],
   "mcpServers": {
     "encryptor": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP@v0.1.2", "encryptor-mcp", "stdio"]
+      "args": ["--from", "git+https://github.com/Self-hosted-MCP/Encryptor-MCP@v0.1.3", "encryptor-mcp", "stdio"]
     }
   }
 }

@@ -59,7 +59,7 @@ The **Tests** workflow on GitHub runs everything on macOS, Windows and Linux, fo
 2. Run the tests (with the reference libraries) and wait for the **Tests** workflow on GitHub to pass.
 3. Push to `main`, tag it `vX.Y.Z`, and publish a GitHub Release with the changelog notes.
 
-Publishing the release starts two workflows. **Docker image** builds the ready-made image for amd64 and arm64 and publishes it as `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp` (tags: the version, major.minor and `latest`). The **Claude Desktop extension** workflow builds `encryptor-mcp-<version>.mcpb`, checks it with Anthropic's validator, and attaches it to the release, also as `encryptor-mcp.mcpb` so one link always gets the newest. Nothing reaches the image or the extension before a release is published.
+Publishing the release starts two workflows. **Docker image** builds the ready-made image for amd64 and arm64 and publishes it as `ghcr.io/self-hosted-mcp/encryptor-mcp` (tags: the version, major.minor and `latest`). The **Claude Desktop extension** workflow builds `encryptor-mcp-<version>.mcpb`, checks it with Anthropic's validator, and attaches it to the release, also as `encryptor-mcp.mcpb` so one link always gets the newest. Nothing reaches the image or the extension before a release is published.
 
 ## Writing docs
 

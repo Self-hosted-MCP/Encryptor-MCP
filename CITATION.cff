@@ -3,8 +3,8 @@ message: "If you use or build on this project, please credit it like this."
 title: "Encryptor MCP"
 type: software
 authors:
-  - alias: "s17sh70x2jfl031ag"
-repository-code: "https://github.com/s17sh70x2jfl031ag/Encryptor-MCP"
+  - name: "Self-hosted MCP"
+repository-code: "https://github.com/Self-hosted-MCP/Encryptor-MCP"
 license: AGPL-3.0-only
-version: 0.1.2
+version: 0.1.3
 keywords: [mcp, cryptomator, encryption, vault, self-hosted]

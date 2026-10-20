@@ -6,7 +6,7 @@ services:
     name: encryptor-mcp
     runtime: image
     image:
-      url: ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:latest
+      url: ghcr.io/self-hosted-mcp/encryptor-mcp:latest
     # no plan line: Render then uses its smallest paid instance, which can keep a disk. The free plan can't keep
     # a disk, so your vaults, settings and connected apps would be lost at each restart.
     healthCheckPath: /health

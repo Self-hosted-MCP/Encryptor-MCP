@@ -51,14 +51,14 @@ Menus in these apps change often. If a label below doesn't match what you see, l
 | [Augment Code](#augment-code) | Yes | Yes |
 | [Any other MCP app](#any-other-mcp-app) | Usually | If it supports MCP login (OAuth) |
 
-The app-by-app settings below follow each app's own documentation as of October 2026, linked under each app. Tell us in an [issue](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new) if one has changed.
+The app-by-app settings below follow each app's own documentation as of October 2026, linked under each app. Tell us in an [issue](https://github.com/Self-hosted-MCP/Encryptor-MCP/issues/new) if one has changed.
 
 ## Before you start: install the command
 
 For the same-computer way you need [uv](https://docs.astral.sh/uv/). Then install Encryptor MCP:
 
 ```bash
-uv tool install git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP
+uv tool install git+https://github.com/Self-hosted-MCP/Encryptor-MCP
 ```
 
 The command is now `encryptor-mcp`. Your app starts it with the argument `stdio`.
@@ -461,7 +461,7 @@ Over the internet (**+ Add remote MCP**): `"encryptor": { "type": "http", "url":
 Without installing anything, `uvx` can run it straight from GitHub:
 
 ```json
-{ "command": "uvx", "args": ["--from", "git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP", "encryptor-mcp", "stdio"],
+{ "command": "uvx", "args": ["--from", "git+https://github.com/Self-hosted-MCP/Encryptor-MCP", "encryptor-mcp", "stdio"],
   "env": { "ENCRYPTOR_VAULTS": "Personal=/path/to/Personal" } }
 ```
 
@@ -493,7 +493,7 @@ Then restart the server (`docker compose up -d`). Apps on your own computer (loc
 
 ## What we tested
 
-The same-computer way (`stdio`) is tested with the official MCP Python client, in the automated tests on macOS. The app-by-app steps above follow each app's own documentation as of October 2026: we haven't tried each app ourselves yet. We haven't tried the internet way end to end inside Docker either. If a step doesn't match what you see, tell us in a [question](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new?template=question.yml).
+The same-computer way (`stdio`) is tested with the official MCP Python client, in the automated tests on macOS. The app-by-app steps above follow each app's own documentation as of October 2026: we haven't tried each app ourselves yet. We haven't tried the internet way end to end inside Docker either. If a step doesn't match what you see, tell us in a [question](https://github.com/Self-hosted-MCP/Encryptor-MCP/issues/new?template=question.yml).
 
 ---
 

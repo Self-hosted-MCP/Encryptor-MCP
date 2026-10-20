@@ -407,11 +407,11 @@ The vault is open read only. Lock it and unlock it again without **Read only**, 
 
 ## Still stuck?
 
-Open an issue with the [bug report form](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new?template=bug_report.yml). Include:
+Open an issue with the [bug report form](https://github.com/Self-hosted-MCP/Encryptor-MCP/issues/new?template=bug_report.yml). Include:
 
 - what you asked the AI, or did on the control center, and what happened
 - how you run it (computer, Claude Desktop extension, Docker) and which AI app
 - `encryptor-mcp version`, and your system (like macOS 15)
 - the exact message
 
-Leave out vault passwords, recovery keys, your passphrase, file names and anything from your files. Issues are public. For a security problem, report it [privately](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/security/advisories/new) instead.
+Leave out vault passwords, recovery keys, your passphrase, file names and anything from your files. Issues are public. For a security problem, report it [privately](https://github.com/Self-hosted-MCP/Encryptor-MCP/security/advisories/new) instead.

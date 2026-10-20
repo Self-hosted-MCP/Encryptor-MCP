@@ -33,7 +33,7 @@ In your DNS settings, add an `A` record for `vault.example.com` with your server
 ### 2. Get the code and settings
 
 ```bash
-git clone https://github.com/s17sh70x2jfl031ag/Encryptor-MCP.git
+git clone https://github.com/Self-hosted-MCP/Encryptor-MCP.git
 ```
 
 ```bash

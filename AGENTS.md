@@ -132,7 +132,7 @@ When a person asks you to set Encryptor MCP up for them, follow this. The user g
 
 **The server must have** (check each one; say clearly if something is missing)
 
-- the Compose setup from this repository (`docker compose up -d --build`), or the ready-made image `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp`,
+- the Compose setup from this repository (`docker compose up -d --build`), or the ready-made image `ghcr.io/self-hosted-mcp/encryptor-mcp`,
 - a domain pointing at the server, set as `ENCRYPTOR_DOMAIN`, so Caddy gets the HTTPS certificate (`PUBLIC_URL` must be `https://`),
 - the vault folders under `./vaults` (a synced folder, or the rclone profile), added on the control center as `/vaults/<name>`,
 - a persistent volume at `/data`,

@@ -8,7 +8,7 @@ Always on, so your phone and the Claude or ChatGPT website can reach your vaults
 > [!IMPORTANT]
 > On a hosting company, your vaults live on the hosting company's disk, at `/data/vaults`. They don't sync with your other devices by themselves, the way a Nextcloud or Dropbox folder does. To use the vaults you already have in a cloud, use [your own server with rclone](setup-own-server.md) instead.
 
-Every option runs the ready-made image `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp` (or builds this repository's `Dockerfile`) and needs two things:
+Every option runs the ready-made image `ghcr.io/self-hosted-mcp/encryptor-mcp` (or builds this repository's `Dockerfile`) and needs two things:
 
 1. **A passphrase**, `LOGIN_PASSPHRASE`, 8 characters or more. It locks the control center, and AI apps ask for it once when they connect.
 2. **A disk at `/data`** that survives restarts. It keeps your vaults, the control center's settings and connected AI apps. Without one, everything is lost at each restart.
@@ -25,7 +25,7 @@ The server finds its public address by itself on Railway and Render. Elsewhere, 
 
 ## One click: Render
 
-<a href="https://render.com/deploy?repo=https://github.com/s17sh70x2jfl031ag/Encryptor-MCP"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"></a>
+<a href="https://render.com/deploy?repo=https://github.com/Self-hosted-MCP/Encryptor-MCP"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"></a>
 
 1. Press the button (or in Render: **New → Blueprint**, and pick this repository). It reads [`render.yaml`](../render.yaml).
 2. Fill in `LOGIN_PASSPHRASE`. Render adds a 1 GB disk at `/data`.
@@ -34,7 +34,7 @@ The server finds its public address by itself on Railway and Render. Elsewhere, 
 
 ## Railway, by hand
 
-1. In Railway: **New project → Deploy from GitHub repo**, and pick this repository. It builds the `Dockerfile` (see [`railway.json`](../railway.json)). Or **Docker image**: `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:latest`.
+1. In Railway: **New project → Deploy from GitHub repo**, and pick this repository. It builds the `Dockerfile` (see [`railway.json`](../railway.json)). Or **Docker image**: `ghcr.io/self-hosted-mcp/encryptor-mcp:latest`.
 2. **Variables:** `LOGIN_PASSPHRASE` and `PORT=8767`.
 3. **Volume:** add one, mounted at `/data`.
 4. **Settings → Networking:** generate a public domain on port 8767. **Healthcheck path:** `/health`.
@@ -47,7 +47,7 @@ Anything that runs a Docker image works (Fly.io, Koyeb, Northflank, Coolify, a N
 
 | What | Value |
 |---|---|
-| Image | `ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:latest` (or a version, like `:0.1`) |
+| Image | `ghcr.io/self-hosted-mcp/encryptor-mcp:latest` (or a version, like `:0.1`) |
 | Port | 8767 (HTTP; the hosting company adds HTTPS) |
 | Health check | `/health` |
 | Disk | at `/data` |
@@ -81,6 +81,6 @@ See [updates.md](updates.md).
 
 | Step | Tested |
 |---|---|
-| The published image (`ghcr.io/s17sh70x2jfl031ag/encryptor-mcp:0.1.1`) on a disk owned by root, like Railway's and Render's: it gives `/data` to the `encryptor` user, runs as that user, `/health` says `ok` | Yes, in Docker on a Mac (2026-10-17) |
+| The published image (`ghcr.io/self-hosted-mcp/encryptor-mcp:0.1.1`) on a disk owned by root, like Railway's and Render's: it gives `/data` to the `encryptor` user, runs as that user, `/health` says `ok` | Yes, in Docker on a Mac (2026-10-17) |
 | A vault created in `/data/vaults` survives a restart | Yes |
 | Railway and Render, end to end | Not yet |

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 (2026-10-20)
+
+- The project moved to the [Self-hosted MCP](https://github.com/Self-hosted-MCP) organisation on GitHub. Old links to the repository redirect to the new one.
+- The ready-made Docker image is now `ghcr.io/self-hosted-mcp/encryptor-mcp`. If you run the old image name, switch to this one to keep getting updates.
+- `scripts/update.sh` follows GitHub's redirects.
+
 ## 0.1.2 (2026-10-17)
 
 - Unlocking works in apps that say they can open the unlock page but can't: Encryptor falls back to the Mac password box or a link.

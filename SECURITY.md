@@ -10,14 +10,14 @@ Only the newest release gets security fixes. Updating is the fix. See [docs/upda
 
 | Version | Security fixes |
 |---|---|
-| 0.1.x (the latest release, [see Releases](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest)) | Yes |
+| 0.1.x (the latest release, [see Releases](https://github.com/Self-hosted-MCP/Encryptor-MCP/releases/latest)) | Yes |
 | Anything older | No, please update |
 
 ## Reporting a problem
 
 Please **don't** open a public issue, discussion or pull request for a security problem.
 
-1. Go to the **Security** tab of this repository and click **[Report a vulnerability](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/security/advisories/new)**. Only the maintainer sees it.
+1. Go to the **Security** tab of this repository and click **[Report a vulnerability](https://github.com/Self-hosted-MCP/Encryptor-MCP/security/advisories/new)**. Only the maintainer sees it.
 2. Tell me what's in the next section.
 3. Never send real vault passwords, recovery keys, passphrases, login keys or vault contents. Use a test vault: make one in Cryptomator, or on the control center.
 

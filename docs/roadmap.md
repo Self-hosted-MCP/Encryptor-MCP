@@ -1,6 +1,6 @@
 # Roadmap
 
-What might come next. Nothing here is promised or has a date. If you want one of them, say so with the [question or idea form](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/issues/new?template=question.yml), or help build it ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+What might come next. Nothing here is promised or has a date. If you want one of them, say so with the [question or idea form](https://github.com/Self-hosted-MCP/Encryptor-MCP/issues/new?template=question.yml), or help build it ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ## Wanted
 

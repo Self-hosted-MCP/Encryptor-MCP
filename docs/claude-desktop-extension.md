@@ -14,7 +14,7 @@ You don't need a password to install it. Vault passwords are typed only on the u
 
 ## Install
 
-1. Download [`encryptor-mcp.mcpb`](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) from the latest release.
+1. Download [`encryptor-mcp.mcpb`](https://github.com/Self-hosted-MCP/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) from the latest release.
 2. Open it (double-click), or in Claude Desktop go to **Settings → Extensions** and drag it in.
 3. Claude Desktop shows what it is and asks for two optional settings:
 
@@ -79,7 +79,7 @@ All settings: [settings.md](settings.md).
 
 ## Update
 
-Download the newest [`encryptor-mcp.mcpb`](https://github.com/s17sh70x2jfl031ag/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) and open it again. Your vaults, settings and changes stay. See [updates.md](updates.md).
+Download the newest [`encryptor-mcp.mcpb`](https://github.com/Self-hosted-MCP/Encryptor-MCP/releases/latest/download/encryptor-mcp.mcpb) and open it again. Your vaults, settings and changes stay. See [updates.md](updates.md).
 
 ## Remove
 

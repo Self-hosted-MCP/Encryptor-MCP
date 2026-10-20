@@ -60,7 +60,7 @@ You should see a version number, such as `uv 0.11.19`.
 ## 2. Install Encryptor MCP
 
 ```bash
-uv tool install git+https://github.com/s17sh70x2jfl031ag/Encryptor-MCP
+uv tool install git+https://github.com/Self-hosted-MCP/Encryptor-MCP
 ```
 
 This adds one command, `encryptor-mcp`. Check it:

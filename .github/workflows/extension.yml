@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   mcpb:
-    if: github.repository == 's17sh70x2jfl031ag/Encryptor-MCP'
+    if: github.repository == 'Self-hosted-MCP/Encryptor-MCP'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
