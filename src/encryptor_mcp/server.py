@@ -726,7 +726,10 @@ def _open_note(name: str) -> str:
 def lock(
     vault: Annotated[str, Field(description="The vault to lock. Leave empty to lock every open vault.")] = "",
 ) -> str:
-    """Lock a vault now (or every open vault, when vault is left empty). The keys are wiped from memory."""
+    """Lock one vault now, or every open vault this app can see when vault is left empty: its keys are wiped from
+    memory and a Finder mount of it closes. Use it when the task is done (vaults also lock by themselves after some
+    minutes without use); unlock asks the user to open it again. No file is changed, and locking a locked vault is
+    harmless. Returns which vault was locked, or that it was already locked."""
     m = manager()
     if not vault:
         for spec in list(m.vaults.values()):
@@ -768,7 +771,10 @@ def list_folder(
     folder: Annotated[str, Field(description=(
         "The folder to list, for example 'Taxes/2025'. '/' is the top of the vault."))] = "/",
 ) -> str:
-    """List a folder in an open vault: names, kinds and sizes. folder: a path like 'Taxes/2025' ('/' is the top)."""
+    """List what's directly inside one folder of an open vault: one line per item, marked [folder], [file] (with its
+    size) or [link] (with its target), or "(empty)". Use find instead when you don't know which folder holds
+    something, and file_info for one item's details. Changes nothing. Fails if the vault is locked (call unlock) or
+    the path isn't a folder."""
     s = session_for(vault)
     e = _resolve(s, folder)
     if e.kind != "dir":
@@ -805,8 +811,11 @@ def read_file(
         "long file in parts."))] = 0,
     max_chars: Annotated[int, Field(description="The most characters to return at once.")] = 50_000,
 ) -> str:
-    """Read a text file from an open vault. purpose: a few words on why (kept in the log). offset and max_chars
-    read a long file in parts. Pictures and other binary files aren't returned as text."""
+    """Read the text of one file in an open vault. Returns the text, starting with a version line to pass to
+    write_file if you replace the file (left out when the vault is read only), and ending with the offset for the
+    next part when more is left; max_chars is capped at 200,000. Pictures and other binary files only get a note
+    with their size. Changes nothing in the vault; the read and its purpose go in the user's private read log. Fails
+    if the vault is locked (call unlock) or the path doesn't exist; use find or list_folder to find paths."""
     s = session_for(vault)
     e = _resolve(s, path)
     try:
@@ -878,8 +887,12 @@ def find(
 def health_check(
     vault: VaultName,
 ) -> str:
-    """Check that an open vault's structure is whole (folders, long names, files), like Cryptomator's own health
-    check, plus files that were cut or changed. Read only: repairs are made by the user on the control center."""
+    """Check an open vault for damage: broken folders, long names or files (the same kinds of problems
+    Cryptomator's own health check reports), files cut short or swapped, and sync conflict copies. Returns one line
+    per problem (how serious, where, what, and whether a safe repair exists), or that the vault is healthy. It
+    changes no file in the vault: the first run only records file fingerprints, kept encrypted outside the vault, so
+    later runs can catch cut or swapped files. Repairs are made by the user on the vault's page (call
+    control_center)."""
     s = session_for(vault)
     found, note = full_health(s)
     s.health = (time.time(), found)
@@ -1089,9 +1102,11 @@ async def write_file(
         "for a new file."))] = "",
     confirm: Confirm = "",
 ) -> str:
-    """Create a text file, or replace one. To replace, pass the version that read_file or file_info gave you;
-    if the file changed since, nothing is written. The old contents are kept and the change can be undone.
-    purpose: a few words on why (kept in the change log). confirm: only when a previous answer asked for it."""
+    """Create a new text file, or replace a whole existing one, in an open vault that may be changed. To replace,
+    pass the version read_file or file_info gave you: without it, or if the file changed since, nothing is written.
+    To add to the end of a file use append_file; the parent folder must exist (make_folder). The old contents are
+    kept, the change is logged, and undo or restore_version can take it back. Returns the new version and the
+    change id; if the user asked to approve replacements, it may instead return a question for them."""
     s = writable(vault)
     if len(content) > MAX_WRITE_CHARS:
         raise ToolError(f"Too long: at most {MAX_WRITE_CHARS} characters at a time (use append_file for more).")
@@ -1115,8 +1130,11 @@ def append_file(
     purpose: Purpose,
     ctx: Context,
 ) -> str:
-    """Add text to the end of an existing text file, exactly as given: to add it on a new line, start the text with
-    a line break. The previous contents are kept and it can be undone."""
+    """Add text to the end of an existing text file in an open vault that may be changed, exactly as given (start
+    it with a line break to begin a new line). Unlike write_file it needs no version and keeps what's there; to
+    create a file, use write_file. The previous contents are kept as a version and the change is logged, so undo
+    can take it back while the file is unchanged since. Returns the file's new version and the change id; fails if
+    the file doesn't exist or the text is over 5,000,000 characters."""
     s = writable(vault)
     if len(content) > MAX_WRITE_CHARS:
         raise ToolError(f"Too long: at most {MAX_WRITE_CHARS} characters at a time.")
@@ -1132,8 +1150,9 @@ def make_folder(
     purpose: Purpose,
     ctx: Context,
 ) -> str:
-    """Create a new, empty folder in an open vault. Its parent folder must already exist. The change is logged
-    and can be undone."""
+    """Create one new, empty folder in an open vault that may be changed. Its parent folder must already exist
+    (create each level in turn), and nothing may have that name yet. Use move to rename a folder. The change is
+    logged; undo removes the folder again while it's still empty. Returns the folder's path and the change id."""
     s = writable(vault)
     rec = _change(s, journal(s).mkdir, path, app_name(ctx), purpose)
     return f"Created the folder {rec['path']}. " + _said(rec)
@@ -1149,7 +1168,10 @@ async def move(
     ctx: Context,
     confirm: Confirm = "",
 ) -> str:
-    """Move or rename a file or folder, within one vault. Nothing is overwritten: the new place must be free."""
+    """Move or rename a file or folder (with everything in it) inside one open vault that may be changed. Nothing
+    is overwritten: the new path must be free and its parent folder must exist. Use copy_file to keep the original,
+    or trash to remove something. The change is logged and undo moves it back. Returns the old and new paths and
+    the change id; if the user asked to approve moves, it may instead return a question for them."""
     s = writable(vault)
     if "move" in ask_before():
         no = await approve(ctx, _fp("move", s.vault.name, path, to), f"Move '{path}' to '{to}' in {s.vault.name}?",
@@ -1170,7 +1192,10 @@ def copy_file(
     purpose: Purpose,
     ctx: Context,
 ) -> str:
-    """Copy a file to a new name or folder in the same vault (stays encrypted the whole time)."""
+    """Copy one file to a new path in the same open vault, which must be one that may be changed. It's copied
+    encrypted, never decrypted. Files only, not folders; the new path must be free and its folder must exist, so
+    nothing is overwritten. Use move to rename instead. The change is logged; undo puts the copy in the trash
+    while it's unchanged. Returns both paths and the change id."""
     s = writable(vault)
     rec = _change(s, journal(s).copy, path, to, app_name(ctx), purpose)
     return f"Copied {rec['source']} to {rec['path']}. " + _said(rec)
@@ -1184,8 +1209,10 @@ async def trash(
     ctx: Context,
     confirm: Confirm = "",
 ) -> str:
-    """Put a file or folder in the vault's trash. It stays encrypted in the vault and can be taken back out with
-    undo. Deleting for good is only possible by emptying the trash, which the user approves."""
+    """Put a file or folder (with everything in it) in the vault's own trash, the way to remove things here. It
+    stays encrypted in the vault, the change is logged, and undo takes it back out; trash_list shows what's there.
+    Deleting for good happens only with empty_trash, which the user approves. Returns the path and the change id;
+    if the user asked to approve this, it may instead return a question for them."""
     s = writable(vault)
     if "trash" in ask_before():
         no = await approve(ctx, _fp("trash", s.vault.name, path), f"Put '{path}' in the trash in {s.vault.name}?",
@@ -1217,8 +1244,11 @@ async def empty_trash(
     item: Annotated[str, Field(description=(
         "The id of one item, from trash_list. Leave empty to empty the whole trash."))] = "",
 ) -> str:
-    """Delete for good: one item from the trash (its id from trash_list), or the whole trash when item is empty.
-    This can't be undone, so the user approves it themselves outside the chat."""
+    """Delete for good from an open vault's trash: one item (its id from trash_list), or everything when item is
+    empty. This is the only tool that deletes for good and it can't be undone; to remove something undoably use
+    trash. The user approves it outside the chat (a box on their Mac or the app's own question), never with a code
+    from you; if that can't be asked, or the user switched it off for AI apps, it sends them to the control center.
+    Returns how many items were deleted, or that nothing was changed."""
     s = writable(vault)
     if not allow_purge():
         raise ToolError("Deleting for good is switched off for AI apps. The user can empty the trash on the control "
@@ -1267,8 +1297,11 @@ def undo(
         "The id of the change to undo, from recent_changes. Leave empty to undo the latest "
         "change."))] = "",
 ) -> str:
-    """Undo one change (its id from recent_changes), or the latest one. Refuses when the file changed since,
-    so newer work is never lost."""
+    """Take back one change made in an open vault: the one with change_id (from recent_changes), or the latest
+    one not yet undone. A new file or copy goes to the trash, a replaced or appended file gets its old contents
+    back, a move is moved back, trashed items come back out, and an empty new folder is removed. It refuses when
+    the file changed since (use versions and restore_version then), and an undo or empty_trash can't be undone.
+    Returns what was done; the undo itself is logged too."""
     s = writable(vault)
     rec = _change(s, journal(s).undo, change_id, app_name(ctx), purpose)
     return f"Undone change {rec['undo_of']}: {rec['did']}." if rec.get("undo_of") else f"Undone: {rec['did']}."

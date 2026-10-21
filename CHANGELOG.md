@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 (2026-10-21)
+
+- Clearer descriptions for more tools: what each returns, when it refuses, and which tool to use instead.
+
 ## 0.1.5 (2026-10-21)
 
 - Clearer tool descriptions for AI apps: each says what the tool does, when to use it and which tool to use instead.
