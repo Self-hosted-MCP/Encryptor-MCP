@@ -51,6 +51,7 @@ import sys
 import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import Annotated
 
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -531,8 +532,12 @@ def redact_access_line(record) -> bool:
 
 def build_server(remote: bool) -> MCPServer:
     """remote: the web version, with the passphrase login for AI apps and the control center at its address."""
+    try:
+        app_version = version(APP)
+    except PackageNotFoundError:
+        app_version = ""
     if not remote:
-        return MCPServer("encryptor", instructions=INSTRUCTIONS, title="Encryptor MCP")
+        return MCPServer("encryptor", instructions=INSTRUCTIONS, title="Encryptor MCP", version=app_version)
     from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
     from . import auth
     global PROVIDER, _center, _pages
@@ -553,7 +558,7 @@ def build_server(remote: bool) -> MCPServer:
     if secure:   # browsers then always use HTTPS for these pages
         page_html.HEADERS["Strict-Transport-Security"] = "max-age=31536000"
     server = MCPServer(
-        "encryptor", instructions=INSTRUCTIONS, title="Encryptor MCP",
+        "encryptor", instructions=INSTRUCTIONS, title="Encryptor MCP", version=app_version,
         auth_server_provider=provider,
         auth=AuthSettings(
             issuer_url=public,
@@ -611,6 +616,16 @@ MODE = sys.argv[1] if len(sys.argv) > 1 else "help"
 mcp = build_server(MODE == "serve")
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
+# What each tool input means, sent to AI apps in the tool's schema.
+VaultName = Annotated[str, Field(description=(
+    "The vault's name, as listed by the vaults tool, for example 'Taxes'."))]
+VaultPath = Annotated[str, Field(description=(
+    "A path inside the vault, from its top, for example 'Taxes/2025/receipts.md'."))]
+Purpose = Annotated[str, Field(description=(
+    "A few words on why, shown to the user or kept in the vault's change log."))]
+Confirm = Annotated[str, Field(description=(
+    "Leave empty. Only pass the code a previous answer gave you, after the user agreed."))]
+
 
 @mcp.tool(annotations=READ)
 def vaults() -> str:
@@ -640,7 +655,11 @@ def vaults() -> str:
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))
-async def unlock(vault: str, purpose: str, ctx: Context) -> str:
+async def unlock(
+    vault: VaultName,
+    purpose: Purpose,
+    ctx: Context,
+) -> str:
     """Ask the user to open a locked vault. The user types the password on their own computer (a local page or a
     password box), never in this chat, and chooses how long it stays open. purpose: a few words on why, shown to
     the user. Never ask the user for the password yourself."""
@@ -702,7 +721,9 @@ def _open_note(name: str) -> str:
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False))
-def lock(vault: str = "") -> str:
+def lock(
+    vault: Annotated[str, Field(description="The vault to lock. Leave empty to lock every open vault.")] = "",
+) -> str:
     """Lock a vault now (or every open vault, when vault is left empty). The keys are wiped from memory."""
     m = manager()
     if not vault:
@@ -740,7 +761,11 @@ def _resolve(s, path: str) -> tree.Entry:
 
 
 @mcp.tool(annotations=READ)
-def list_folder(vault: str, folder: str = "/") -> str:
+def list_folder(
+    vault: VaultName,
+    folder: Annotated[str, Field(description=(
+        "The folder to list, for example 'Taxes/2025'. '/' is the top of the vault."))] = "/",
+) -> str:
     """List a folder in an open vault: names, kinds and sizes. folder: a path like 'Taxes/2025' ('/' is the top)."""
     s = session_for(vault)
     e = _resolve(s, folder)
@@ -768,8 +793,16 @@ def _size(n: int) -> str:
 
 
 @mcp.tool(annotations=READ)
-def read_file(vault: str, path: str, purpose: str, ctx: Context = None, offset: int = 0,
-              max_chars: int = 50_000) -> str:
+def read_file(
+    vault: VaultName,
+    path: VaultPath,
+    purpose: Purpose,
+    ctx: Context = None,
+    offset: Annotated[int, Field(description=(
+        "Where to start reading, in characters from the start of the file. Use it to read a "
+        "long file in parts."))] = 0,
+    max_chars: Annotated[int, Field(description="The most characters to return at once.")] = 50_000,
+) -> str:
     """Read a text file from an open vault. purpose: a few words on why (kept in the log). offset and max_chars
     read a long file in parts. Pictures and other binary files aren't returned as text."""
     s = session_for(vault)
@@ -792,7 +825,10 @@ def read_file(vault: str, path: str, purpose: str, ctx: Context = None, offset: 
 
 
 @mcp.tool(annotations=READ)
-def file_info(vault: str, path: str) -> str:
+def file_info(
+    vault: VaultName,
+    path: VaultPath,
+) -> str:
     """Details of a file or folder in an open vault: kind, size, last change, and where it's stored encrypted."""
     s = session_for(vault)
     e = _resolve(s, path)
@@ -807,7 +843,14 @@ def file_info(vault: str, path: str) -> str:
 
 
 @mcp.tool(annotations=READ)
-def find(vault: str, name_contains: str, folder: str = "/", limit: int = 100) -> str:
+def find(
+    vault: VaultName,
+    name_contains: Annotated[str, Field(description=(
+        "Text to look for in file and folder names, in any case, for example 'invoice'."))],
+    folder: Annotated[str, Field(description=(
+        "Only look inside this folder and the folders in it. '/' searches the whole vault."))] = "/",
+    limit: Annotated[int, Field(description="The most results to return.")] = 100,
+) -> str:
     """Find files and folders whose name contains some text (any case), in an open vault."""
     s = session_for(vault)
     start = _resolve(s, folder)
@@ -826,7 +869,9 @@ def find(vault: str, name_contains: str, folder: str = "/", limit: int = 100) ->
 
 
 @mcp.tool(annotations=READ)
-def health_check(vault: str) -> str:
+def health_check(
+    vault: VaultName,
+) -> str:
     """Check that an open vault's structure is whole (folders, long names, files), like Cryptomator's own health
     check, plus files that were cut or changed. Read only: repairs are made by the user on the control center."""
     s = session_for(vault)
@@ -842,7 +887,10 @@ def health_check(vault: str) -> str:
 
 
 @mcp.tool(annotations=READ)
-def locate(vault: str, path: str) -> str:
+def locate(
+    vault: VaultName,
+    path: VaultPath,
+) -> str:
     """Where a file or folder of an open vault is stored encrypted on disk (relative to the vault's folder): handy
     for sync conflicts or backups."""
     s = session_for(vault)
@@ -859,7 +907,12 @@ def locate(vault: str, path: str) -> str:
 
 
 @mcp.tool(annotations=READ)
-def decrypt_name(vault: str, encrypted_path: str) -> str:
+def decrypt_name(
+    vault: VaultName,
+    encrypted_path: Annotated[str, Field(description=(
+        "An encrypted path inside the vault's folder, for example 'd/AB/CDEF.../name.c9r', as a"
+        " sync app or file browser shows it."))],
+) -> str:
     """The real path of an encrypted path inside an open vault, like d/AB/CDEF.../name.c9r (as shown by a sync app
     or a file browser)."""
     s = session_for(vault)
@@ -1018,8 +1071,17 @@ def _said(rec: dict) -> str:
 
 
 @change_tool()
-async def write_file(vault: str, path: str, content: str, purpose: str, ctx: Context, version: str = "",
-                     confirm: str = "") -> str:
+async def write_file(
+    vault: VaultName,
+    path: VaultPath,
+    content: Annotated[str, Field(description="The whole text the file should hold.")],
+    purpose: Purpose,
+    ctx: Context,
+    version: Annotated[str, Field(description=(
+        "To replace an existing file: the version read_file or file_info gave you. Leave empty "
+        "for a new file."))] = "",
+    confirm: Confirm = "",
+) -> str:
     """Create a text file, or replace one. To replace, pass the version that read_file or file_info gave you;
     if the file changed since, nothing is written. The old contents are kept and the change can be undone.
     purpose: a few words on why (kept in the change log). confirm: only when a previous answer asked for it."""
@@ -1037,7 +1099,15 @@ async def write_file(vault: str, path: str, content: str, purpose: str, ctx: Con
 
 
 @change_tool()
-def append_file(vault: str, path: str, content: str, purpose: str, ctx: Context) -> str:
+def append_file(
+    vault: VaultName,
+    path: VaultPath,
+    content: Annotated[str, Field(description=(
+        "The text to add to the end of the file, exactly as given. Start it with a line break "
+        "to add a new line."))],
+    purpose: Purpose,
+    ctx: Context,
+) -> str:
     """Add text to the end of an existing text file, exactly as given: to add it on a new line, start the text with
     a line break. The previous contents are kept and it can be undone."""
     s = writable(vault)
@@ -1048,7 +1118,13 @@ def append_file(vault: str, path: str, content: str, purpose: str, ctx: Context)
 
 
 @change_tool()
-def make_folder(vault: str, path: str, purpose: str, ctx: Context) -> str:
+def make_folder(
+    vault: VaultName,
+    path: Annotated[str, Field(description=(
+        "The new folder's path, for example 'Taxes/2026'. Its parent folder must exist."))],
+    purpose: Purpose,
+    ctx: Context,
+) -> str:
     """Create a folder (its parent folder must exist)."""
     s = writable(vault)
     rec = _change(s, journal(s).mkdir, path, app_name(ctx), purpose)
@@ -1056,7 +1132,15 @@ def make_folder(vault: str, path: str, purpose: str, ctx: Context) -> str:
 
 
 @change_tool()
-async def move(vault: str, path: str, to: str, purpose: str, ctx: Context, confirm: str = "") -> str:
+async def move(
+    vault: VaultName,
+    path: VaultPath,
+    to: Annotated[str, Field(description=(
+        "The new path in the same vault, for example 'Archive/2025/notes.md'. It must be free."))],
+    purpose: Purpose,
+    ctx: Context,
+    confirm: Confirm = "",
+) -> str:
     """Move or rename a file or folder, within one vault. Nothing is overwritten: the new place must be free."""
     s = writable(vault)
     if "move" in ask_before():
@@ -1069,7 +1153,15 @@ async def move(vault: str, path: str, to: str, purpose: str, ctx: Context, confi
 
 
 @change_tool()
-def copy_file(vault: str, path: str, to: str, purpose: str, ctx: Context) -> str:
+def copy_file(
+    vault: VaultName,
+    path: VaultPath,
+    to: Annotated[str, Field(description=(
+        "The path for the copy in the same vault, for example 'Taxes/receipts copy.md'. It must"
+        " be free."))],
+    purpose: Purpose,
+    ctx: Context,
+) -> str:
     """Copy a file to a new name or folder in the same vault (stays encrypted the whole time)."""
     s = writable(vault)
     rec = _change(s, journal(s).copy, path, to, app_name(ctx), purpose)
@@ -1077,7 +1169,13 @@ def copy_file(vault: str, path: str, to: str, purpose: str, ctx: Context) -> str
 
 
 @change_tool()
-async def trash(vault: str, path: str, purpose: str, ctx: Context, confirm: str = "") -> str:
+async def trash(
+    vault: VaultName,
+    path: VaultPath,
+    purpose: Purpose,
+    ctx: Context,
+    confirm: Confirm = "",
+) -> str:
     """Put a file or folder in the vault's trash. It stays encrypted in the vault and can be taken back out with
     undo. Deleting for good is only possible by emptying the trash, which the user approves."""
     s = writable(vault)
@@ -1091,7 +1189,9 @@ async def trash(vault: str, path: str, purpose: str, ctx: Context, confirm: str 
 
 
 @mcp.tool(annotations=READ)
-def trash_list(vault: str) -> str:
+def trash_list(
+    vault: VaultName,
+) -> str:
     """What's in the vault's trash: each item's id, original path and when it was put there."""
     s = session_for(vault)
     items = journal(s).trash_items()
@@ -1101,7 +1201,13 @@ def trash_list(vault: str) -> str:
 
 
 @change_tool(destructive=True)
-async def empty_trash(vault: str, purpose: str, ctx: Context, item: str = "") -> str:
+async def empty_trash(
+    vault: VaultName,
+    purpose: Purpose,
+    ctx: Context,
+    item: Annotated[str, Field(description=(
+        "The id of one item, from trash_list. Leave empty to empty the whole trash."))] = "",
+) -> str:
     """Delete for good: one item from the trash (its id from trash_list), or the whole trash when item is empty.
     This can't be undone, so the user approves it themselves outside the chat."""
     s = writable(vault)
@@ -1123,7 +1229,10 @@ async def empty_trash(vault: str, purpose: str, ctx: Context, item: str = "") ->
 
 
 @mcp.tool(annotations=READ)
-def recent_changes(vault: str, limit: int = 20) -> str:
+def recent_changes(
+    vault: VaultName,
+    limit: Annotated[int, Field(description="How many of the latest changes to show.")] = 20,
+) -> str:
     """The latest changes in a vault: when, which app, why, and whether they were undone."""
     s = session_for(vault)
     recs = journal(s).records(max(1, min(limit, 200)))
@@ -1139,7 +1248,14 @@ def recent_changes(vault: str, limit: int = 20) -> str:
 
 
 @change_tool()
-def undo(vault: str, purpose: str, ctx: Context, change_id: str = "") -> str:
+def undo(
+    vault: VaultName,
+    purpose: Purpose,
+    ctx: Context,
+    change_id: Annotated[str, Field(description=(
+        "The id of the change to undo, from recent_changes. Leave empty to undo the latest "
+        "change."))] = "",
+) -> str:
     """Undo one change (its id from recent_changes), or the latest one. Refuses when the file changed since,
     so newer work is never lost."""
     s = writable(vault)
@@ -1148,7 +1264,10 @@ def undo(vault: str, purpose: str, ctx: Context, change_id: str = "") -> str:
 
 
 @mcp.tool(annotations=READ)
-def versions(vault: str, path: str) -> str:
+def versions(
+    vault: VaultName,
+    path: VaultPath,
+) -> str:
     """Earlier versions of a file kept by its changes, newest first, for restore_version."""
     s = session_for(vault)
     vs = journal(s).versions(path)
@@ -1158,7 +1277,14 @@ def versions(vault: str, path: str) -> str:
 
 
 @change_tool()
-def restore_version(vault: str, path: str, version_id: str, purpose: str, ctx: Context) -> str:
+def restore_version(
+    vault: VaultName,
+    path: VaultPath,
+    version_id: Annotated[str, Field(description=(
+        "The id of the earlier version to put back, from versions."))],
+    purpose: Purpose,
+    ctx: Context,
+) -> str:
     """Put back an earlier version of a file (its id from versions). The current contents are kept too."""
     s = writable(vault)
     rec = _change(s, journal(s).restore_version, path, version_id, app_name(ctx), purpose)
