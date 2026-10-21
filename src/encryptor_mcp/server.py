@@ -629,7 +629,9 @@ Confirm = Annotated[str, Field(description=(
 
 @mcp.tool(annotations=READ)
 def vaults() -> str:
-    """The vaults this app may use: open or locked, read only or not, and when an open one locks by itself."""
+    """List the vaults this app may use: whether each is open or locked, read only or not, and when an open one
+    locks by itself. Call it first, to learn the vault names the other tools take. Changes nothing: use unlock to
+    open a locked vault and lock to close one."""
     refresh()
     m = manager()
     m.sweep()
@@ -829,7 +831,9 @@ def file_info(
     vault: VaultName,
     path: VaultPath,
 ) -> str:
-    """Details of a file or folder in an open vault: kind, size, last change, and where it's stored encrypted."""
+    """Show the details of one file or folder in an open vault: kind, size, last change, where it's stored
+    encrypted, and for a file the version that write_file needs to replace it. Use read_file for the contents.
+    Changes nothing."""
     s = session_for(vault)
     e = _resolve(s, path)
     stat = e.stored.stat()
@@ -851,7 +855,9 @@ def find(
         "Only look inside this folder and the folders in it. '/' searches the whole vault."))] = "/",
     limit: Annotated[int, Field(description="The most results to return.")] = 100,
 ) -> str:
-    """Find files and folders whose name contains some text (any case), in an open vault."""
+    """Search an open vault for files and folders whose name contains some text (any case) and list their paths.
+    Use it when you don't know where something is; use list_folder to see one folder. It matches names only, not
+    what's inside files. Changes nothing."""
     s = session_for(vault)
     start = _resolve(s, folder)
     if start.kind != "dir":
@@ -913,8 +919,9 @@ def decrypt_name(
         "An encrypted path inside the vault's folder, for example 'd/AB/CDEF.../name.c9r', as a"
         " sync app or file browser shows it."))],
 ) -> str:
-    """The real path of an encrypted path inside an open vault, like d/AB/CDEF.../name.c9r (as shown by a sync app
-    or a file browser)."""
+    """Turn an encrypted path from a vault's folder (like d/AB/CDEF.../name.c9r, as a sync app or file browser
+    shows it) back into the real path of that file or folder. The vault must be open. Use it to see which file a
+    sync conflict or a backup entry is; locate does the opposite. Changes nothing."""
     s = session_for(vault)
     try:
         clear = s.tree.decrypt_path(encrypted_path)
@@ -1125,7 +1132,8 @@ def make_folder(
     purpose: Purpose,
     ctx: Context,
 ) -> str:
-    """Create a folder (its parent folder must exist)."""
+    """Create a new, empty folder in an open vault. Its parent folder must already exist. The change is logged
+    and can be undone."""
     s = writable(vault)
     rec = _change(s, journal(s).mkdir, path, app_name(ctx), purpose)
     return f"Created the folder {rec['path']}. " + _said(rec)
@@ -1192,7 +1200,8 @@ async def trash(
 def trash_list(
     vault: VaultName,
 ) -> str:
-    """What's in the vault's trash: each item's id, original path and when it was put there."""
+    """List what's in an open vault's trash: each item's id, original path and when it was put there. Use it to
+    find an item to bring back with undo, or to delete for good with empty_trash. Changes nothing."""
     s = session_for(vault)
     items = journal(s).trash_items()
     return "\n".join(f"{r['trash']}  {r['path']}{'/' if r.get('kind') == 'dir' else ''}  "
@@ -1233,7 +1242,9 @@ def recent_changes(
     vault: VaultName,
     limit: Annotated[int, Field(description="How many of the latest changes to show.")] = 20,
 ) -> str:
-    """The latest changes in a vault: when, which app, why, and whether they were undone."""
+    """List the latest changes made in an open vault, newest first: each change's id, when, what, which app, why,
+    and whether it was undone. Use it to show the user what changed, or to find the id undo takes. Changes
+    nothing."""
     s = session_for(vault)
     recs = journal(s).records(max(1, min(limit, 200)))
     out = []
@@ -1268,7 +1279,8 @@ def versions(
     vault: VaultName,
     path: VaultPath,
 ) -> str:
-    """Earlier versions of a file kept by its changes, newest first, for restore_version."""
+    """List the earlier versions of one file that its changes kept, newest first, with the ids restore_version
+    takes. Use it to pick which version to put back. Changes nothing."""
     s = session_for(vault)
     vs = journal(s).versions(path)
     return "\n".join(f"{v['id']}  from before the {v['action']} at "
@@ -1285,7 +1297,8 @@ def restore_version(
     purpose: Purpose,
     ctx: Context,
 ) -> str:
-    """Put back an earlier version of a file (its id from versions). The current contents are kept too."""
+    """Put back an earlier version of a file, using its id from versions. The current contents are kept as a
+    version too, so this can be undone. To take back a whole change (a move, a trash), use undo instead."""
     s = writable(vault)
     rec = _change(s, journal(s).restore_version, path, version_id, app_name(ctx), purpose)
     return f"Restored {rec['path']} to version {version_id}. " + _said(rec)

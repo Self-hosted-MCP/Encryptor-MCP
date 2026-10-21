@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 (2026-10-21)
+
+- Clearer tool descriptions for AI apps: each says what the tool does, when to use it and which tool to use instead.
+
 ## 0.1.4 (2026-10-21)
 
 - Every tool input now has a short description, so AI apps know what to pass (for example a vault's name or a file's path).
