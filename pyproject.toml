@@ -1,6 +1,6 @@
 [project]
 name = "encryptor-mcp"
-version = "0.1.3"
+version = "0.1.4"
 description = "Open Cryptomator vaults from any AI app or agent: read and write with the vault's own keys, unlocked by you, never through the chat."
 readme = "README.md"
 license = "AGPL-3.0-only"

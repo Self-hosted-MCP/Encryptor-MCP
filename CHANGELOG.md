@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 (2026-10-21)
+
+- Every tool input now has a short description, so AI apps know what to pass (for example a vault's name or a file's path).
+- AI apps see the server's version number when they connect.
+
 ## 0.1.3 (2026-10-20)
 
 - The project moved to the [Self-hosted MCP](https://github.com/Self-hosted-MCP) organisation on GitHub. Old links to the repository redirect to the new one.
