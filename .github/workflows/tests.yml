@@ -42,3 +42,13 @@ jobs:
           CRYPTOMATOR_MODS: ${{ github.workspace }}/.jars
           REQUIRE_REFERENCE: "1"
         run: uv run pytest -q
+
+  workflows:
+    name: workflows (zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1, pinned
+        with:
+          persist-credentials: false
+      # Unsafe patterns in GitHub Actions: leaked tokens, injection, broad permissions.
+      - run: pipx run zizmor==1.31.1 --offline .
