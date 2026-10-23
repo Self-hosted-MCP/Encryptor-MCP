@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 (2026-10-23)
+
+- Releases now come with a signature file next to the Claude Desktop extension (`encryptor-mcp.mcpb.sigstore.json`), so you can check the download is the one this project built. How: [docs/updates.md](docs/updates.md#check-a-downloads-signature).
+- Two small clean-ups found by a new automatic bug check that now runs on every change. Nothing changes in how the program works.
+- Repository: code scanning, an OpenSSF Scorecard check, a pull request template and the community files (code of conduct, governance, support, contributors).
+
 ## 0.1.6 (2026-10-21)
 
 - Clearer descriptions for more tools: what each returns, when it refuses, and which tool to use instead.
