@@ -417,7 +417,7 @@ def vault_page(v: dict) -> str:
             f'<dt>{esc(_("Without use"))}</dt><dd>{esc(_("locks after {n} minutes", n=v["idle_minutes"]))}</dd></dl>'
             f'<div class="actions"><a class="btn plain" href="{base}/files/">{esc(_("Browse files"))}</a>{finder}'
             f'<form method="post" action="{base}/lock"><button class="btn" type="submit">{ICONS["lock"]}{esc(_("Lock now"))}</button></form></div>'
-            + (f'<p class="note">' + esc(_("In {app} under Locations, decrypted only in memory. Deleting there puts "
+            + ('<p class="note">' + esc(_("In {app} under Locations, decrypted only in memory. Deleting there puts "
                                             "things in the vault's trash.", app=v["finder"])) + '</p>' if v["mounted"] else
                f'<p class="note">{esc(_("Decrypted only in memory, never on disk. You can close this page."))}</p>')
             + "</section>")

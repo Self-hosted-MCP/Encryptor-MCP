@@ -341,7 +341,7 @@ class Site:
             return 200, {}, pages.center_home(self.home_view(sess, _("Every vault is locked. The keys are gone from memory.")))
         if head == "devices" and len(parts) == 3 and parts[2] == "signout" and method == "POST":
             token = _cookies(headers).get(c.cookie, "")
-            n = c.sessions.end_device(parts[1], token, others=parts[1] == "others")
+            c.sessions.end_device(parts[1], token, others=parts[1] == "others")
             return 303, {"Location": "/activity#devices"}, ""
         if head == "vaults" and len(parts) == 3 and method == "POST":
             name = unquote(parts[1])

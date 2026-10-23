@@ -27,7 +27,7 @@ def test_every_change_reads_the_same_in_cryptomator(vault):
     w = Writer(t)
     root = t.resolve("/")
     new = w.make_dir(root, "New folder")
-    deep = w.make_dir(new, LONG + " folder")                        # a shortened folder name
+    w.make_dir(new, LONG + " folder")                        # a shortened folder name
     put(t, f"/New folder/{LONG} folder/inside.md", b"# deep\n")
     put(t, f"/New folder/{LONG}.txt", b"long file name\n")          # a shortened file name
     put(t, "/New folder/big.bin", bytes(range(256)) * 400)          # several chunks

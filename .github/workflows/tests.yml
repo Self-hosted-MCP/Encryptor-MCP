@@ -37,6 +37,8 @@ jobs:
           java-version: "25"
       - name: Fetch Cryptomator's libraries (checksums pinned)
         run: uv run --no-project python tests/java/fetch_jars.py "${{ github.workspace }}/.jars"
+      - name: Lint (ruff)
+        run: uvx --from ruff==0.17.2 ruff check .
       - name: Tests
         env:
           CRYPTOMATOR_MODS: ${{ github.workspace }}/.jars
