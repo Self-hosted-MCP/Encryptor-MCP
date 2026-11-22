@@ -916,6 +916,17 @@ def app_login(info: tuple[str, str] | None, req: str, vaults: list[str], error: 
     return page(_("Connect {app}", app=app), body)
 
 
+def app_continue(info: tuple[str, str], target: str) -> str:
+    """After a good passphrase: back to the AI app, on its own (Refresh header and meta) or with the button."""
+    app, back = info
+    body = (f'<meta http-equiv="refresh" content="0;url={esc(target)}"><meta name="referrer" content="no-referrer">'
+            f'<section class="card"><h1><span class="mark">{esc(_("Connect {app}", app=app))}</span></h1>'
+            f'<p class="sub">{esc(_("It returns to {place} afterwards.", place=back))}</p>'
+            f'<div class="actions"><a class="btn wide" href="{esc(target)}">{esc(_("Back to {vault}", vault=app))}</a>'
+            '</div></section>')
+    return page(_("Connect {app}", app=app), body)
+
+
 def message(title: str, text: str, ok: bool = False, center: bool = False) -> str:
     more = (f'<div class="actions"><a class="btn plain" href="/">{esc(_("All vaults"))}</a></div>' if center else "")
     return page(title, f'<section class="card"><h1><span class="mark">{esc(title)}</span></h1>{_msg(text, ok)}{more}</section>')

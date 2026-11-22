@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 (2026-11-22)
+
+- Connecting an AI app on a server now works in Chrome and other browsers. After the passphrase, the page used to send you straight back to the app, and the browser blocked that step because of the page's own safety rules. Now a short page takes you back on its own, with a button if it doesn't.
+
 ## 0.1.7 (2026-10-23)
 
 - Releases now come with a signature file next to the Claude Desktop extension (`encryptor-mcp.mcpb.sigstore.json`), so you can check the download is the one this project built. How: [docs/updates.md](docs/updates.md#check-a-downloads-signature).

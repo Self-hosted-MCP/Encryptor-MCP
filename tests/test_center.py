@@ -252,7 +252,9 @@ def test_app_login_picks_vaults_and_change(hosted):
     assert client.post("/login", data={"req": req, "passphrase": "nope-nope", "vault": "GCM"}, headers=o).status_code == 401
     r = client.post("/login", data={"req": req, "passphrase": PASS, "vault": ["GCM", "Ghost"]}, headers=o,
                     follow_redirects=False)
-    assert r.status_code == 302 and r.headers["location"].startswith("https://claude.ai/cb?code=")
+    # 200 with a Refresh, not a 302: form-action 'self' would make the browser block a redirect to the app
+    assert r.status_code == 200 and r.headers["refresh"].startswith("0;url=https://claude.ai/cb?code=")
+    assert 'href="https://claude.ai/cb?code=' in r.text and "form-action 'self'" in r.headers["content-security-policy"]
     assert provider.grants["c1"]["vaults"] == ["GCM"] and provider.grants["c1"]["change"] is False
 
 

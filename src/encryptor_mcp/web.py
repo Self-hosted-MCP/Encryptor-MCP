@@ -566,7 +566,10 @@ class Site:
         if target is None:
             time.sleep(1)
             return 401, {}, pages.app_login(info, req, names, _("Wrong passphrase."))
-        return 302, {"Location": target, "Referrer-Policy": "no-referrer"}, ""
+        # Not a 302: the page's CSP has form-action 'self', and browsers apply it to a redirect after a form post,
+        # so a 302 to the app (claude.ai, localhost, ...) is blocked. A page that moves on by itself is not a form.
+        return 200, {"Refresh": f"0;url={target}", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store"}, \
+            pages.app_continue(info, target)
 
     # ------------------------------------------------ every request
 
