@@ -29,6 +29,11 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
     ENCRYPTOR_READ_ONLY     yes: no AI app may change anything in any vault (the control center's switch, fixed)
     ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
     ENCRYPTOR_LANGUAGE      the pages' language, like de or ja (default: the browser's)
+    ENCRYPTOR_AUTO_UNLOCK   vaults that open by themselves at start, comma separated: Vault,Other. Each one's
+                            password is in ENCRYPTOR_PASSWORD_<NAME> (the name in capitals, other signs as _:
+                            "My Notes" is ENCRYPTOR_PASSWORD_MY_NOTES). They stay open (no auto-lock); Lock on the
+                            control center holds until the next start. Only for a server you trust: anyone who
+                            can read its settings can open the vault.
     ENCRYPTOR_ASK_BEFORE    also approve these, comma separated: replace, trash, move (default: none; every
                             change can be undone anyway)
     The web version also reads PUBLIC_URL (https://...), LOGIN_HASH or LOGIN_PASSPHRASE, HOST and PORT.
@@ -70,7 +75,7 @@ ENV_FILE = Path(os.environ.get("ENCRYPTOR_ENV_FILE") or CONFIG_DIR / ".env").exp
 SETTINGS = ("ENCRYPTOR_VAULTS", "ENCRYPTOR_MODES", "ENCRYPTOR_IDLE_MINUTES", "ENCRYPTOR_MAX_HOURS", "ENCRYPTOR_UNLOCK",
             "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER", "PUBLIC_URL", "LOGIN_HASH",
             "LOGIN_PASSPHRASE", "HOST", "PORT", "RENDER_EXTERNAL_URL", "RAILWAY_PUBLIC_DOMAIN", "ALLOWED_REDIRECT_HOSTS",
-            "ENCRYPTOR_READ_ONLY", "ENCRYPTOR_LANGUAGE")
+            "ENCRYPTOR_READ_ONLY", "ENCRYPTOR_LANGUAGE", "ENCRYPTOR_AUTO_UNLOCK")
 STATE_DIR = Path(os.environ.get("ENCRYPTOR_DATA_DIR") or CONFIG_DIR / "state").expanduser()
 PAGE_FILE = STATE_DIR / "settings.json"    # vaults, modes and auto-lock chosen on the control center
 OAUTH_FILE = STATE_DIR / "oauth.json"      # the web version's connected AI apps (tokens only as fingerprints)
@@ -353,7 +358,24 @@ def manager() -> UnlockManager:
         cfg = config()
         _manager = UnlockManager(vault_specs(cfg), idle_minutes(cfg), float(cfg.get("ENCRYPTOR_MAX_HOURS") or 12))
         _manager.start_sweeper()
+        auto_unlock(_manager, cfg)
     return _manager
+
+
+def password_setting(vault: str) -> str:
+    """The name of the setting with a vault's password for ENCRYPTOR_AUTO_UNLOCK: My Notes -> ENCRYPTOR_PASSWORD_MY_NOTES."""
+    return "ENCRYPTOR_PASSWORD_" + re.sub(r"[^A-Z0-9]+", "_", vault.upper()).strip("_")
+
+
+def auto_unlock(m: UnlockManager, cfg: dict) -> None:
+    """Opens the vaults named in ENCRYPTOR_AUTO_UNLOCK with their passwords from the environment (never the .env
+    file on disk). A missing password is logged; the vault then waits for a person, as usual."""
+    for name in [n.strip() for n in (cfg.get("ENCRYPTOR_AUTO_UNLOCK") or "").split(",") if n.strip()]:
+        password = os.environ.get(password_setting(name), "")
+        if not password:
+            m._event(name, f"auto-unlock skipped: {password_setting(name)} is not set")
+            continue
+        m.auto_unlock(name, password)
 
 
 _mounts = None

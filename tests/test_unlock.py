@@ -101,6 +101,37 @@ def test_lock_now_and_lock_all_wipe_keys(m):
     assert not m.sessions and set(s1.key.mac) == {0} and set(s2.key.mac) == {0}
 
 
+def test_auto_unlock_stays_open_until_locked_by_hand(m, clock):
+    """ENCRYPTOR_AUTO_UNLOCK: open at start, no idle lock, no time limit; Lock holds (no reopening by itself)."""
+    assert m.auto_unlock("Test", PW)
+    s = m.use("Test")
+    assert s.keep == U.AUTO and not s.read_only and m.seconds_left(s) > 50 * 365 * 24 * 3600
+    clock[0] += 400 * 24 * 3600                       # far past the idle time and the 12 hours
+    assert m.status("Test") is not None
+    assert m.lock("Test") and m.status("Test") is None
+    clock[0] += 3600
+    assert m.status("Test") is None                   # stays locked until the next start
+    assert m.auto_unlock("Ro", "test-password-SIV_CTRMAC") and m.use("Ro").read_only   # a read-only vault stays so
+
+
+def test_auto_unlock_never_raises_and_never_logs_the_password(m):
+    assert not m.auto_unlock("Test", "wrong-password-xyz")
+    assert not m.auto_unlock("Nope", PW)
+    assert m.status("Test") is None
+    log = " ".join(what for _t, _v, what in m.events)
+    assert "wrong password in the settings" in log and "no vault with this name" in log
+    assert "wrong-password-xyz" not in log and PW not in log
+
+
+def test_auto_unlock_reads_the_password_from_the_environment(m, monkeypatch):
+    from encryptor_mcp import server
+    assert server.password_setting("My Notes 2") == "ENCRYPTOR_PASSWORD_MY_NOTES_2"
+    monkeypatch.setenv("ENCRYPTOR_PASSWORD_TEST", PW)
+    server.auto_unlock(m, {"ENCRYPTOR_AUTO_UNLOCK": "Test, Ro"})
+    assert m.status("Test") is not None and m.status("Ro") is None
+    assert any("ENCRYPTOR_PASSWORD_RO is not set" in what for _t, _v, what in m.events)
+
+
 def test_events_never_hold_passwords(m):
     try:
         m.unlock(m.request_unlock("Test", "App", "why"), "a-wrong-secret")

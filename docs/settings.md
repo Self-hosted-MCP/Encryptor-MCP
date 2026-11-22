@@ -17,6 +17,7 @@ When two places disagree:
 - **The control center wins** for the vault list, vault names and folders, what the AI may do with each vault, the default vault and auto-lock times. Values in the settings file are only where things start; once you change something on the page, the page's choice counts.
 - **An environment variable wins over the settings file**, as long as it isn't empty.
 - **`ENCRYPTOR_READ_ONLY` is fixed when you set it.** When it's set in an environment variable or the settings file (on or off), the control center's switch shows it but can't change it.
+- **`ENCRYPTOR_PASSWORD_<NAME>` is read from environment variables only**, never from the settings file on disk, so a vault password is never written into a file by Encryptor. On Coolify, Railway or Render, put it in the service's secret settings.
 - **`ENCRYPTOR_CONFIG_DIR`, `ENCRYPTOR_DATA_DIR`, `ENCRYPTOR_ENV_FILE` and `ENCRYPTOR_APP_NAME`** are read from environment variables only, never from the settings file.
 
 A template with the settings people set, each explained in one line: [`.env.example`](../.env.example).
@@ -100,6 +101,7 @@ Whether **AI apps may ask to delete the trash for good** is a switch on the cont
 | Setting | What it does | Default |
 |---|---|---|
 | `ENCRYPTOR_LANGUAGE` | Show the pages in one language, like `de`, `ja` or `pt-BR`, whatever the browser asks for. Codes and how to add a language: [languages.md](languages.md) | empty (follow the browser's language) |
+| `ENCRYPTOR_AUTO_UNLOCK` | Vaults that open by themselves when the server starts, comma separated (`Vault,Notes`). Each one's password goes in its own environment variable, `ENCRYPTOR_PASSWORD_<NAME>`: the name in capitals, other signs as `_` (`My Notes` is `ENCRYPTOR_PASSWORD_MY_NOTES`). These vaults stay open, with no auto-lock and no time limit. **Lock** on the control center holds until the next start. Only for a server you trust: anyone who can read its settings can open the vault | empty (every vault waits for a person to unlock it) |
 
 ## Updates
 

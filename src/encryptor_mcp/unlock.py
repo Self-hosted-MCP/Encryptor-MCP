@@ -25,6 +25,8 @@ UNLOCK_LINK_TTL = 5 * 60
 FAIL_WINDOW = 15 * 60
 FAIL_LIMIT = 5
 KEEP_CHOICES = {"15m": 15 * 60, "1h": 3600, "lock": None, "app": None}
+AUTO = "auto"            # opened at start with the password from the settings: no idle lock, no time limit
+AUTO_YEARS = 100 * 365 * 24 * 3600
 
 
 class Locked(Exception):
@@ -192,6 +194,38 @@ class UnlockManager:
             self._event(v.name, f"unlocked for {r.app}, keep {keep}" + (", read only" if s.read_only else ""))
             return s
 
+    def auto_unlock(self, vault: str, password: str) -> bool:
+        """Opens a vault at start with the password from the settings (ENCRYPTOR_AUTO_UNLOCK). It stays open: no
+        idle lock and no time limit. Locking it by hand holds until the next start. Never raises: a wrong password
+        or a missing vault is written to the log and the vault stays locked."""
+        with self.lock_:
+            v = self.vaults.get((vault or "").casefold())
+            if v is None:
+                self._event(vault, "auto-unlock skipped: no vault with this name")
+                return False
+            try:
+                key = keys.unlock_masterkey((v.path / "masterkey.cryptomator").read_bytes(), password)
+            except keys.WrongPassword:
+                self._event(v.name, "auto-unlock failed: wrong password in the settings")
+                return False
+            except OSError:
+                self._event(v.name, "auto-unlock failed: the vault's key file can't be read")
+                return False
+            try:
+                config = keys.verify_vault_config((v.path / "vault.cryptomator").read_bytes(), key)
+            except Exception:
+                key.wipe()
+                self._event(v.name, "auto-unlock failed: the vault's config doesn't match")
+                return False
+            now = self.clock()
+            old = self.sessions.pop(v.name.casefold(), None)
+            if old:
+                old.key.wipe()
+            self.sessions[v.name.casefold()] = Session(v, key, tree.Tree(v.path, key, config), v.mode == "read", AUTO,
+                                                       now, now + AUTO_YEARS, now, "auto-unlock", "")
+            self._event(v.name, "unlocked at start (auto-unlock)")
+            return True
+
     def use(self, vault: str, person: bool = False) -> Session:
         """The open session for a vault, counting this as activity. Raises Locked if it isn't open."""
         v = self.spec(vault, person)
@@ -236,6 +270,8 @@ class UnlockManager:
         with self.lock_:
             now = self.clock()
             for name, s in list(self.sessions.items()):
+                if s.keep == AUTO:
+                    continue
                 if now >= s.expires:
                     self.lock(s.vault.name, "locked: time is up")
                 elif now - s.last_used >= self.idle_for(s.vault):
@@ -244,6 +280,8 @@ class UnlockManager:
     def seconds_left(self, s: Session) -> int:
         """Until the vault locks by itself: the sooner of the idle limit and the time chosen."""
         now = self.clock()
+        if s.keep == AUTO:
+            return int(s.expires - now)
         return max(0, int(min(s.expires - now, s.last_used + self.idle_for(s.vault) - now)))
 
     def idle_for(self, v: VaultSpec) -> float:

@@ -120,7 +120,7 @@ class Site:
     def vault_view(self, s, note: str = "") -> dict:
         m, mounts = self.manager, self.mounts
         view = {"name": s.vault.name, "status_code": s.status_code, "read_only": s.read_only, "keep": s.keep,
-                "app": s.app, "ends_at": time.strftime("%H:%M", time.localtime(s.expires)),
+                "app": s.app, "ends_at": "" if s.keep == "auto" else time.strftime("%H:%M", time.localtime(s.expires)),
                 "idle_minutes": int(m.idle_for(s.vault) // 60), "left_minutes": m.seconds_left(s) // 60,
                 "finder": mounts.label() if mounts and mounts.available() else None,
                 "mounted": mounts.where(s.vault.name) if mounts else "", "note": note,
@@ -282,7 +282,7 @@ class Site:
             rows.append({"name": v.name, "mode": v.mode, "open": s is not None,
                          "read_only": bool(s and s.read_only) or v.mode == "read",
                          "status_code": s.status_code if s else "", "app": s.app if s else "",
-                         "ends_at": time.strftime("%H:%M", time.localtime(s.expires)) if s else "",
+                         "ends_at": time.strftime("%H:%M", time.localtime(s.expires)) if s and s.keep != "auto" else "",
                          "left_minutes": m.seconds_left(s) // 60 if s else 0})
         apps = []
         prov = self.center.provider

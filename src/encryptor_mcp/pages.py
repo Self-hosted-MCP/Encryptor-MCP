@@ -399,7 +399,8 @@ def _action(a: str) -> str:
 
 
 def vault_page(v: dict) -> str:
-    keep_text = _(dict(KEEP_LABELS)[v["keep"]]) if v["keep"] in dict(KEEP_LABELS) else v["keep"]
+    keep_text = (_("Until I lock it") if v["keep"] == "auto" else
+                 _(dict(KEEP_LABELS)[v["keep"]]) if v["keep"] in dict(KEEP_LABELS) else v["keep"])
     base = f'/vault/{esc(v["status_code"])}'
     finder = ""
     if v["finder"]:
@@ -409,8 +410,9 @@ def vault_page(v: dict) -> str:
                   f'{esc(_("Show in {app}", app=v["finder"]))}</button></form>')
     head = (f'<section class="card">{_msg(v["note"], ok=True)}'
             f'<div class="headline"><h1><span class="mark">{esc(v["name"])}</span></h1>'
-            f'<span class="stamp" role="img" aria-label="{esc(_("Locks at {time} at the latest", time=v["ends_at"]))}">'
-            f'{esc(_("Due back"))}<b>{esc(v["ends_at"])}</b></span></div>'
+            + (f'<span class="stamp" role="img" aria-label="{esc(_("Locks at {time} at the latest", time=v["ends_at"]))}">'
+               f'{esc(_("Due back"))}<b>{esc(v["ends_at"])}</b></span>' if v["ends_at"] else
+               f'<span class="stamp">{esc(_("Until I lock it"))}</span>') + '</div>'
             f'<dl class="facts"><dt>{esc(_("Lent to"))}</dt><dd>{esc(v["app"])}</dd>'
             f'<dt>{esc(_("Access"))}</dt><dd>{esc(_("Read only") if v["read_only"] else _("Read and change"))}</dd>'
             f'<dt>{esc(_("Kept open"))}</dt><dd>{esc(keep_text)}</dd>'
@@ -506,7 +508,8 @@ def center_home(d: dict) -> str:
             meta = (f'<span class="dot on"></span>{esc(_("Lent to {app}", app=v["app"]))}'
                     f'{(" · " + esc(_("read only"))) if v["read_only"] and v["mode"] != "read" else ""}{esc(tag)}')
             due = (f'<span class="stamp mini" role="img" aria-label="{esc(_("Due back {time}", time=v["ends_at"]))}">'
-                   f'{esc(_("Due {time}", time=v["ends_at"]))}</span>')
+                   f'{esc(_("Due {time}", time=v["ends_at"]))}</span>' if v["ends_at"] else
+                   f'<span class="stamp mini">{esc(_("Until I lock it"))}</span>')
             act = (due + f'<a class="btn small plain" href="/vault/{esc(v["status_code"])}">{esc(_("Open"))}</a>'
                    f'<form method="post" action="/vaults/{quote(v["name"])}/lock">{_csrf(d["csrf"])}'
                    f'<button class="btn small" type="submit">{esc(_("Lock"))}</button></form>')

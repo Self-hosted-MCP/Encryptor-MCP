@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9 (2026-11-22)
+
+- New setting `ENCRYPTOR_AUTO_UNLOCK` for a server you trust: the vaults it names open by themselves at start, with each password in its own environment variable (`ENCRYPTOR_PASSWORD_<NAME>`). They stay open with no auto-lock, and Lock on the control center holds until the next start. See [docs/settings.md](docs/settings.md).
+
 ## 0.1.8 (2026-11-22)
 
 - Connecting an AI app on a server now works in Chrome and other browsers. After the passphrase, the page used to send you straight back to the app, and the browser blocked that step because of the page's own safety rules. Now a short page takes you back on its own, with a button if it doesn't.
