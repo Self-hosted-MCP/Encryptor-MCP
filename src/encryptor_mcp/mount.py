@@ -78,7 +78,9 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             self.tree = session.tree
             self.cache: dict[bytes, tuple[float, dict[str, Entry]]] = {}
             self.junk: dict[str, bytes] = {}
-            self.mutex = threading.RLock()
+            self.mutex = threading.RLock()        # guards the cache only, never held while reading the vault
+            self.loads: dict[bytes, threading.Lock] = {}   # one read at a time per folder
+            self.generation = 0                   # goes up on every change, so a list read before it isn't kept
 
         def is_readonly(self):
             return self.readonly
@@ -93,19 +95,39 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
                 except Exception:
                     pass
 
-        def listing(self, dir_id: bytes) -> dict[str, Entry]:
+        def cached(self, dir_id: bytes) -> dict[str, Entry] | None:
             with self.mutex:
                 hit = self.cache.get(dir_id)
                 if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
                     return hit[1]
+                return None
+
+        def listing(self, dir_id: bytes) -> dict[str, Entry]:
+            """A folder's entries, kept CACHE_SECONDS. Reading a folder can be slow when the vault sits on network
+            storage, so different folders are read side by side; requests for the same folder wait for one read."""
+            items = self.cached(dir_id)
+            if items is not None:
+                return items
+            with self.mutex:
+                load = self.loads.setdefault(dir_id, threading.Lock())
+            with load:
+                items = self.cached(dir_id)   # another request may have read it while this one waited
+                if items is not None:
+                    return items
+                with self.mutex:
+                    generation = self.generation
+                started = time.monotonic()
                 items = {e.name: e for e in self.tree.list_dir(dir_id)
                          if e.kind in ("file", "dir") and not (dir_id == b"" and e.name.casefold() == changes.META)}
-                self.cache[dir_id] = (time.monotonic(), items)
+                with self.mutex:
+                    if self.generation == generation:   # no change happened during the read
+                        self.cache[dir_id] = (started, items)
                 return items
 
         def changed(self):
             with self.mutex:
                 self.cache.clear()
+                self.generation += 1
 
         def entry(self, path: str) -> Entry | None:
             parts = [unicodedata.normalize("NFC", p) for p in path.strip("/").split("/") if p]

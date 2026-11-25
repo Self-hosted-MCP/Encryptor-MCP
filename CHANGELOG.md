@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10 (2026-11-25)
+
+- Faster with vaults on network storage (a cloud drive or an rclone mount). The WebDAV view of a vault read one folder at a time for every request, so when a folder was slow to read, all other requests waited in one line. Now different folders are read side by side, and requests for the same folder share one read.
+
 ## 0.1.9 (2026-11-22)
 
 - New setting `ENCRYPTOR_AUTO_UNLOCK` for a server you trust: the vaults it names open by themselves at start, with each password in its own environment variable (`ENCRYPTOR_PASSWORD_<NAME>`). They stay open with no auto-lock, and Lock on the control center holds until the next start. See [docs/settings.md](docs/settings.md).

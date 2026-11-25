@@ -166,3 +166,82 @@ def test_secret_address_never_logged(dav, caplog, capfd):
     mt2.server.stop()
     out, err = capfd.readouterr()
     assert mt2.secret not in caplog.text and mt2.secret not in out + err
+
+
+@pytest.fixture
+def provider(tmp_path):
+    v = tmp_path / "v"
+    shutil.copytree(FIXTURES / "vault-SIV_GCM", v)
+    m = U.UnlockManager([U.VaultSpec("My Vault", v)])
+    s = m.unlock(m.request_unlock("My Vault"), PW)
+    j = Journal(s.tree)
+    for name in ("/P1", "/P2"):
+        j.mkdir(name, "test", "two separate folders")
+    return mount.build_provider(s, j, m, readonly=True), s
+
+
+def test_folders_are_read_side_by_side(provider, monkeypatch):
+    """A slow folder (network storage) must not make requests for other folders wait for it."""
+    import threading
+    prov, s = provider
+    root = prov.listing(b"")
+    real = type(s.tree).list_dir
+    both_inside = threading.Barrier(2, timeout=5)
+
+    def slow(tree, dir_id=b""):
+        if dir_id != b"":
+            both_inside.wait()   # passes only if the two folders are being read at the same time
+        return real(tree, dir_id)
+    monkeypatch.setattr(type(s.tree), "list_dir", slow)
+    errors = []
+
+    def read(name):
+        try:
+            prov.listing(root[name].dir_id)
+        except Exception as exc:   # a broken barrier means the reads ran one after the other
+            errors.append(exc)
+    threads = [threading.Thread(target=read, args=(name,)) for name in ("P1", "P2")]
+    [t.start() for t in threads]
+    [t.join(10) for t in threads]
+    assert not errors
+
+
+def _held_reads(provider, monkeypatch):
+    """Makes reads of folder P1 wait until go is set, and counts them."""
+    import threading
+    prov, s = provider
+    folder = prov.listing(b"")["P1"].dir_id
+    real = type(s.tree).list_dir
+    reads, entered, go = [], threading.Event(), threading.Event()
+
+    def slow(tree, dir_id=b""):
+        if dir_id == folder:
+            reads.append(dir_id)
+            entered.set()
+            go.wait(5)
+        return real(tree, dir_id)
+    monkeypatch.setattr(type(s.tree), "list_dir", slow)
+    return prov, folder, reads, entered, go
+
+
+def test_requests_for_one_folder_share_one_read(provider, monkeypatch):
+    import threading
+    prov, folder, reads, entered, go = _held_reads(provider, monkeypatch)
+    threads = [threading.Thread(target=prov.listing, args=(folder,)) for _ in range(3)]
+    [t.start() for t in threads]
+    assert entered.wait(5)
+    go.set()
+    [t.join(10) for t in threads]
+    assert len(reads) == 1 and prov.cached(folder) is not None
+
+
+def test_a_list_read_before_a_change_is_not_kept(provider, monkeypatch):
+    import threading
+    prov, folder, reads, entered, go = _held_reads(provider, monkeypatch)
+    t = threading.Thread(target=prov.listing, args=(folder,))
+    t.start()
+    assert entered.wait(5)
+    prov.changed()               # a change lands while the folder is being read
+    go.set()
+    t.join(10)
+    assert prov.cached(folder) is None
