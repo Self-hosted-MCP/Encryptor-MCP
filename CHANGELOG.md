@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.12 (2026-11-25)
+
+- Security update: `opentelemetry-api`, a library the server uses through the MCP SDK, moves to 1.45.2. The older version could be slowed down by a specially made request header.
+
 ## 0.1.11 (2026-11-25)
 
 More speed for vaults on network storage (a cloud drive or an rclone mount), where every look at the vault is a trip over the network:
