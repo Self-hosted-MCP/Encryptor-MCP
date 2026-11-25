@@ -34,7 +34,8 @@ from .vault.tree import Entry
 
 DEBUG = bool(__import__("os").environ.get("ENCRYPTOR_DAV_DEBUG"))
 MAX_PUT = 512 * 1024 * 1024        # files saved from Finder are held in memory (never on disk), so there's a cap
-CACHE_SECONDS = 2.0
+CACHE_SECONDS = 2.0                # how long a folder's list is kept, unless ENCRYPTOR_FOLDER_SECONDS says otherwise
+MAX_FOLDER_SECONDS = 600
 JUNK_NAMES = {".DS_Store", ".Spotlight-V100", ".Trashes", ".fseventsd", ".TemporaryItems", ".hidden", ".apdisk",
               ".VolumeIcon.icns", ".localized", "Icon\r", ".metadata_never_index", ".com.apple.timemachine.donotpresent",
               ".ql_disablethumbnails", ".ql_disablecache"}
@@ -46,6 +47,15 @@ def is_junk(name: str) -> bool:
     return name.startswith("._") or name in JUNK_NAMES
 
 
+def folder_seconds(value) -> float:
+    """ENCRYPTOR_FOLDER_SECONDS: seconds from 0 to 600 to keep a folder's list. Anything else gives the default."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return CACHE_SECONDS
+    return seconds if 0 <= seconds <= MAX_FOLDER_SECONDS else CACHE_SECONDS
+
+
 def _dav():
     from wsgidav import util
     from wsgidav.dav_error import (HTTP_FORBIDDEN, HTTP_PRECONDITION_FAILED, HTTP_REQUEST_ENTITY_TOO_LARGE,
@@ -54,7 +64,7 @@ def _dav():
     return locals()
 
 
-def build_provider(session, journal, manager, readonly: bool, on_read=None):
+def build_provider(session, journal, manager, readonly: bool, on_read=None, keep_seconds: float | None = None):
     d = _dav()
     util, DAVError = d["util"], d["DAVError"]
     FORBIDDEN, TOO_LARGE = d["HTTP_FORBIDDEN"], d["HTTP_REQUEST_ENTITY_TOO_LARGE"]
@@ -81,6 +91,7 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             self.mutex = threading.RLock()        # guards the cache only, never held while reading the vault
             self.loads: dict[bytes, threading.Lock] = {}   # one read at a time per folder
             self.generation = 0                   # goes up on every change, so a list read before it isn't kept
+            self.keep = CACHE_SECONDS if keep_seconds is None else keep_seconds
 
         def is_readonly(self):
             return self.readonly
@@ -98,12 +109,12 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
         def cached(self, dir_id: bytes) -> dict[str, Entry] | None:
             with self.mutex:
                 hit = self.cache.get(dir_id)
-                if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
+                if hit and time.monotonic() - hit[0] < self.keep:
                     return hit[1]
                 return None
 
         def listing(self, dir_id: bytes) -> dict[str, Entry]:
-            """A folder's entries, kept CACHE_SECONDS. Reading a folder can be slow when the vault sits on network
+            """A folder's entries, kept self.keep seconds. Reading a folder can be slow when the vault sits on network
             storage, so different folders are read side by side; requests for the same folder wait for one read."""
             items = self.cached(dir_id)
             if items is not None:
@@ -127,6 +138,28 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
         def changed(self):
             with self.mutex:
                 self.cache.clear()
+                self.generation += 1
+
+        def forget(self, *paths: str):
+            """After a change: drop only the lists of the folders that hold the changed paths, so the rest of
+            the vault stays quick. A moved folder keeps its own list (its ID and contents don't change)."""
+            ids = set()
+            for path in paths:
+                parent = path.rstrip("/").rsplit("/", 1)[0] or "/"
+                try:
+                    e = self.entry(parent)
+                except VaultError:
+                    e = None
+                if e is None or e.kind != "dir":
+                    self.changed()   # can't tell which folder: forget everything, the safe way
+                    return
+                ids.add(e.dir_id)
+            if not ids:
+                self.changed()
+                return
+            with self.mutex:
+                for dir_id in ids:
+                    self.cache.pop(dir_id, None)
                 self.generation += 1
 
         def entry(self, path: str) -> Entry | None:
@@ -168,7 +201,7 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             except VaultError as exc:
                 refuse(exc)
             finally:
-                self.changed()
+                self.forget(*(a for a in args if isinstance(a, str) and a.startswith("/")))
             manager._event(session.vault.name, f"{rec['action']} {rec['path']} in Finder")
             return rec
 
@@ -217,11 +250,15 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             self.e, self.prov = e, prov
 
         def _stat(self):
-            target = self.prov.tree.contents_path(self.e) if self.e.kind == "file" else self.e.stored
-            try:
-                return target.stat()
-            except OSError:
-                return None
+            """One look at the encrypted file per request: size, dates and tag all come from it (each look can
+            be a trip over the network when the vault sits on network storage)."""
+            if not hasattr(self, "_st"):
+                target = self.prov.tree.contents_path(self.e) if self.e.kind == "file" else self.e.stored
+                try:
+                    self._st = target.stat()
+                except OSError:
+                    self._st = None
+            return self._st
 
         def get_creation_date(self):
             st = self._stat()
@@ -266,6 +303,24 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             names += [p[len(base):] for p in self.prov.junk if p.startswith(base) and "/" not in p[len(base):]]
             return names   # ALWAYS_THERE answers when asked for, without showing in the folder
 
+        def member(self, name, items):
+            """A member built from its folder's list: no new walk from the top of the vault for each one."""
+            e = items.get(unicodedata.normalize("NFC", name))
+            if e is None or is_junk(name):
+                return self.prov.get_resource_inst(util.join_uri(self.path, name), self.environ)
+            return (Folder if e.kind == "dir" else File)(util.join_uri(self.path, name), self.environ, e, self.prov)
+
+        def get_member(self, name):
+            if not self.prov.is_open():
+                return None
+            return self.member(name, self.prov.listing(self.e.dir_id))
+
+        def get_member_list(self):
+            if not self.prov.is_open():
+                return []
+            items = self.prov.listing(self.e.dir_id)
+            return [m for m in (self.member(n, items) for n in self.get_member_names()) if m is not None]
+
         def support_recursive_delete(self):
             return True
 
@@ -290,7 +345,8 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             self.buf = None
 
         def get_content_length(self):
-            return self.prov.tree.file_size(self.e)
+            st = self._stat()
+            return self.prov.tree.content.cleartext_size(st.st_size) if st else self.prov.tree.file_size(self.e)
 
         def get_content_type(self):
             return util.guess_mime_type(self.path, self.environ["wsgidav.config"])
@@ -326,6 +382,7 @@ def build_provider(session, journal, manager, readonly: bool, on_read=None):
             data, self.buf = self.buf.getvalue(), None
             current = self.prov.entry(self.path)
             self.prov.do(journal.write, self.path, data, journal.etag(current) if current else "")
+            self.__dict__.pop("_st", None)   # the file changed: look again if asked
 
     class JunkFile(d["DAVNonCollection"]):
         """Finder's own bookkeeping files: in memory only, gone when the mount goes."""
@@ -419,7 +476,7 @@ def same_user(local_port: int, client_port: int, run=subprocess.run) -> bool:
     return False
 
 
-def serve(session, journal, manager, on_read=None) -> Mount:
+def serve(session, journal, manager, on_read=None, keep_seconds: float | None = None) -> Mount:
     """The WebDAV server for one open vault, on 127.0.0.1 and a free port (not mounted yet)."""
     import logging
 
@@ -438,7 +495,7 @@ def serve(session, journal, manager, on_read=None) -> Mount:
 
     secret = secrets.token_urlsafe(32)
     share = share_name(session.vault.name)
-    provider = build_provider(session, journal, manager, session.read_only, on_read)
+    provider = build_provider(session, journal, manager, session.read_only, on_read, keep_seconds)
     config = {
         "host": "127.0.0.1", "port": 0,
         "provider_mapping": {f"/{secret}/v": provider},
@@ -501,8 +558,10 @@ def serve(session, journal, manager, on_read=None) -> Mount:
 class Mounts:
     """The Finder mounts of open vaults, removed when a vault locks."""
 
-    def __init__(self, manager, journal_for, base_dir, run=subprocess.run, on_read=None):
+    def __init__(self, manager, journal_for, base_dir, run=subprocess.run, on_read=None,
+                 keep_seconds: float | None = None):
         self.on_read = on_read
+        self.keep_seconds = keep_seconds    # ENCRYPTOR_FOLDER_SECONDS
         self.base_dir = base_dir            # mount points go here: <base_dir>/<vault name>
         self.manager = manager
         self.journal_for = journal_for      # session -> changes.Journal (the same one the AI's tools use)
@@ -527,7 +586,7 @@ class Mounts:
         with self.mutex:
             m = self.active.get(session.vault.name.casefold())
             if m is None:
-                m = serve(session, self.journal_for(session), self.manager, self.on_read)
+                m = serve(session, self.journal_for(session), self.manager, self.on_read, self.keep_seconds)
                 point = self.base_dir / m.share
                 point.mkdir(parents=True, exist_ok=True)
                 # -S: no dialogs, and if this server goes away the volume is removed at once

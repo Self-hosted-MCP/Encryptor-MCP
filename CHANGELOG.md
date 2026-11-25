@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.11 (2026-11-25)
+
+More speed for vaults on network storage (a cloud drive or an rclone mount), where every look at the vault is a trip over the network:
+
+- Listing a folder in the WebDAV view no longer finds each file again from the top of the vault. A folder with 100 files took 100 extra walks; now it takes none.
+- Reading a folder reads its subfolders side by side instead of one after another.
+- Each file is looked at once per request, not once for its size, once for its dates and once for its tag.
+- After a change, only the folders it touched are read again; the rest of the vault stays quick.
+- New setting `ENCRYPTOR_FOLDER_SECONDS`: how many seconds the WebDAV view keeps a folder's list (default 2, at most 600). Raise it when the vault sits on network storage. See [docs/settings.md](docs/settings.md).
+
 ## 0.1.10 (2026-11-25)
 
 - Faster with vaults on network storage (a cloud drive or an rclone mount). The WebDAV view of a vault read one folder at a time for every request, so when a folder was slow to read, all other requests waited in one line. Now different folders are read side by side, and requests for the same folder share one read.

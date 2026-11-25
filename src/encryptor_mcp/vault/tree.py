@@ -14,7 +14,9 @@ Conflict copies (like "ABC (1).c9r") are reported, not read, until conflict hand
 from __future__ import annotations
 
 import os
+import threading
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +26,20 @@ from .names import C9R, C9S, MAX_DIR_ID_LENGTH, ROOT_DIR_ID, Names
 
 MAX_NAME_FILE = 4096       # name.c9s holds one encrypted name; refuse anything bigger
 MAX_SYMLINK = 32767 + 4096
+
+
+_pool: ThreadPoolExecutor | None = None
+_pool_lock = threading.Lock()
+READERS = 8
+
+
+def _readers() -> ThreadPoolExecutor:
+    """A few threads shared by all vaults, for reading a folder's entries side by side."""
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = ThreadPoolExecutor(max_workers=READERS, thread_name_prefix="vault-read")
+        return _pool
 
 
 @dataclass
@@ -101,12 +117,12 @@ class Tree:
         location = self.dir_location(dir_id)
         if not location.is_dir():
             raise VaultError("A folder's encrypted directory is missing (the vault may be incomplete or still syncing).")
-        out = []
-        for path in sorted(location.iterdir()):
-            entry = self._entry(path, dir_id)
-            if entry:
-                out.append(entry)
-        return sorted(out, key=lambda e: e.name)
+        paths = sorted(location.iterdir())
+        # Each subfolder means reading its small dir.c9r file. On network storage every read is a trip over the
+        # network, so they are read side by side; the order and the first error stay the same as one by one.
+        found = _readers().map(lambda path: self._entry(path, dir_id), paths) if len(paths) > 1 else \
+            (self._entry(path, dir_id) for path in paths)
+        return sorted((e for e in found if e), key=lambda e: e.name)
 
     def resolve(self, clear_path: str) -> Entry:
         """The entry at a clear path like 'Folder A/notes.txt' ('' or '/' is the root folder)."""

@@ -23,7 +23,7 @@ When two places disagree:
 A template with the settings people set, each explained in one line: [`.env.example`](../.env.example).
 
 > [!NOTE]
-> Restart your AI app (or the server) after changing `ENCRYPTOR_MAX_HOURS`, `ENCRYPTOR_FINDER`, `HOST`, `PORT`, `PUBLIC_URL` or `ALLOWED_REDIRECT_HOSTS`, and after changing any environment variable. Also restart after switching a vault to or from **Read and change**: the AI app only gets the tools that change files when it starts ([why](tools.md#limits)).
+> Restart your AI app (or the server) after changing `ENCRYPTOR_MAX_HOURS`, `ENCRYPTOR_FINDER`, `ENCRYPTOR_FOLDER_SECONDS`, `HOST`, `PORT`, `PUBLIC_URL` or `ALLOWED_REDIRECT_HOSTS`, and after changing any environment variable. Also restart after switching a vault to or from **Read and change**: the AI app only gets the tools that change files when it starts ([why](tools.md#limits)).
 
 ## The control center's settings
 
@@ -95,6 +95,7 @@ Whether **AI apps may ask to delete the trash for good** is a switch on the cont
 | Setting | What it does | Default |
 |---|---|---|
 | `ENCRYPTOR_FINDER` | `off` hides **Show in Finder** on a vault's page. Any other value keeps it | `on` (Docker: `off`) |
+| `ENCRYPTOR_FOLDER_SECONDS` | How many seconds the Finder view keeps a folder's list, from 0 to 600. Raise it when the vault sits on network storage (a cloud drive or an rclone mount), where reading a folder is slow. Changes made outside the Finder view then show up that much later | `2` |
 
 ## Language
 

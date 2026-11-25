@@ -28,6 +28,7 @@ Settings: environment variables and/or <config folder>/.env (~/.config/encryptor
                             one-time code, never for deleting for good), box, ask or code
     ENCRYPTOR_READ_ONLY     yes: no AI app may change anything in any vault (the control center's switch, fixed)
     ENCRYPTOR_FINDER        on (default): the vault's page offers "Show in Finder" (macOS); off hides it
+    ENCRYPTOR_FOLDER_SECONDS  seconds the Finder view keeps a folder's list (default 2, at most 600)
     ENCRYPTOR_LANGUAGE      the pages' language, like de or ja (default: the browser's)
     ENCRYPTOR_AUTO_UNLOCK   vaults that open by themselves at start, comma separated: Vault,Other. Each one's
                             password is in ENCRYPTOR_PASSWORD_<NAME> (the name in capitals, other signs as _:
@@ -75,7 +76,7 @@ ENV_FILE = Path(os.environ.get("ENCRYPTOR_ENV_FILE") or CONFIG_DIR / ".env").exp
 SETTINGS = ("ENCRYPTOR_VAULTS", "ENCRYPTOR_MODES", "ENCRYPTOR_IDLE_MINUTES", "ENCRYPTOR_MAX_HOURS", "ENCRYPTOR_UNLOCK",
             "ENCRYPTOR_APPROVE", "ENCRYPTOR_ASK_BEFORE", "ENCRYPTOR_FINDER", "PUBLIC_URL", "LOGIN_HASH",
             "LOGIN_PASSPHRASE", "HOST", "PORT", "RENDER_EXTERNAL_URL", "RAILWAY_PUBLIC_DOMAIN", "ALLOWED_REDIRECT_HOSTS",
-            "ENCRYPTOR_READ_ONLY", "ENCRYPTOR_LANGUAGE", "ENCRYPTOR_AUTO_UNLOCK")
+            "ENCRYPTOR_READ_ONLY", "ENCRYPTOR_LANGUAGE", "ENCRYPTOR_AUTO_UNLOCK", "ENCRYPTOR_FOLDER_SECONDS")
 STATE_DIR = Path(os.environ.get("ENCRYPTOR_DATA_DIR") or CONFIG_DIR / "state").expanduser()
 PAGE_FILE = STATE_DIR / "settings.json"    # vaults, modes and auto-lock chosen on the control center
 OAUTH_FILE = STATE_DIR / "oauth.json"      # the web version's connected AI apps (tokens only as fingerprints)
@@ -384,9 +385,11 @@ _mounts = None
 def mounts():
     """Finder mounts (macOS), offered on the vault's status page; ENCRYPTOR_FINDER=off hides the button."""
     global _mounts
-    if _mounts is None and (config().get("ENCRYPTOR_FINDER") or "on").lower() != "off":
-        from .mount import Mounts
-        _mounts = Mounts(manager(), journal, CONFIG_DIR / "mounts", on_read=lambda s, p, how: log_read(s, p, how))
+    cfg = config()
+    if _mounts is None and (cfg.get("ENCRYPTOR_FINDER") or "on").lower() != "off":
+        from .mount import Mounts, folder_seconds
+        _mounts = Mounts(manager(), journal, CONFIG_DIR / "mounts", on_read=lambda s, p, how: log_read(s, p, how),
+                         keep_seconds=folder_seconds(cfg.get("ENCRYPTOR_FOLDER_SECONDS")))
     return _mounts
 
 

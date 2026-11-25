@@ -245,3 +245,89 @@ def test_a_list_read_before_a_change_is_not_kept(provider, monkeypatch):
     go.set()
     t.join(10)
     assert prov.cached(folder) is None
+
+
+def test_a_listing_builds_members_from_one_read(tmp_path, monkeypatch):
+    """Listing a folder must not walk from the top of the vault again for each file in it."""
+    v = tmp_path / "v"
+    shutil.copytree(FIXTURES / "vault-SIV_GCM", v)
+    m = U.UnlockManager([U.VaultSpec("My Vault", v)])
+    s = m.unlock(m.request_unlock("My Vault"), PW)
+    j = Journal(s.tree)
+    j.mkdir("/P1", "test", "a folder with files")
+    for i in range(5):
+        j.write(f"/P1/f{i}.txt", b"x", "", "test", "a file")
+    prov = mount.build_provider(s, j, m, readonly=True, keep_seconds=0)   # nothing kept: every list is a read
+    env = {"wsgidav.provider": prov, "wsgidav.config": {}, "wsgidav.verbose": 0}
+    folder = prov.get_resource_inst("/P1", env)
+    real, reads = type(s.tree).list_dir, []
+    monkeypatch.setattr(type(s.tree), "list_dir", lambda tree, dir_id=b"": reads.append(dir_id) or real(tree, dir_id))
+    members = folder.get_member_list()
+    assert sorted(x.name for x in members) == [f"f{i}.txt" for i in range(5)]
+    assert len(reads) <= 2 and b"" not in reads   # only the folder itself, never the top again
+    assert folder.get_member("f3.txt").get_content_length() == 1 and folder.get_member("nope") is None
+
+
+def test_folder_seconds_setting(provider, monkeypatch):
+    assert mount.folder_seconds("30") == 30 and mount.folder_seconds("0") == 0
+    for bad in (None, "", "abc", "-1", "601"):
+        assert mount.folder_seconds(bad) == mount.CACHE_SECONDS
+    prov, s = provider
+    assert prov.keep == mount.CACHE_SECONDS
+    prov.keep = 60
+    folder = prov.listing(b"")["P1"].dir_id
+    prov.listing(folder)
+    real, reads = type(s.tree).list_dir, []
+    monkeypatch.setattr(type(s.tree), "list_dir", lambda tree, dir_id=b"": reads.append(dir_id) or real(tree, dir_id))
+    prov.listing(folder)
+    assert reads == []   # kept for 60 seconds
+
+
+def test_one_look_at_a_file_per_request(provider, monkeypatch):
+    prov, s = provider
+    env = {"wsgidav.provider": prov, "wsgidav.config": {}, "wsgidav.verbose": 0}
+    f = prov.get_resource_inst("/hello.txt", env)
+    target = s.tree.contents_path(f.e)
+    real, looks = Path.stat, []
+    monkeypatch.setattr(Path, "stat", lambda p, *a, **k: (looks.append(p) if p == target else None) or real(p, *a, **k))
+    f.get_content_length(), f.get_etag(), f.get_last_modified(), f.get_creation_date()
+    assert looks.count(target) == 1
+
+
+def test_a_change_forgets_only_its_folder(tmp_path):
+    v = tmp_path / "v"
+    shutil.copytree(FIXTURES / "vault-SIV_GCM", v)
+    m = U.UnlockManager([U.VaultSpec("My Vault", v)])
+    s = m.unlock(m.request_unlock("My Vault"), PW)
+    j = Journal(s.tree)
+    for name in ("/P1", "/P2"):
+        j.mkdir(name, "test", "two separate folders")
+    prov = mount.build_provider(s, j, m, readonly=False, keep_seconds=60)
+    root = prov.listing(b"")
+    p1, p2 = root["P1"].dir_id, root["P2"].dir_id
+    prov.listing(p1), prov.listing(p2)
+    prov.do(j.write, "/P1/new.txt", b"x", "")
+    assert prov.cached(p1) is None                                  # the changed folder is read again
+    assert prov.cached(b"") is not None and prov.cached(p2) is not None   # the rest stays quick
+    assert "new.txt" in prov.listing(p1)
+    prov.do(j.move, "/P1/new.txt", "/P2/moved.txt")                 # a move touches both folders
+    assert "moved.txt" in prov.listing(p2) and "new.txt" not in prov.listing(p1)
+
+
+def test_a_folders_subfolders_are_read_side_by_side(provider, monkeypatch):
+    """Each subfolder's dir.c9r is a separate read; on network storage they must not wait for each other."""
+    import threading
+    prov, s = provider
+    real = type(s.tree)._read_dir_id
+    both_inside = threading.Barrier(2, timeout=5)
+    seen = []
+
+    def slow(path):
+        if path.parent.name not in seen:
+            seen.append(path.parent.name)
+            if len(seen) <= 2:
+                both_inside.wait()   # passes only if two subfolders are read at the same time
+        return real(path)
+    monkeypatch.setattr(type(s.tree), "_read_dir_id", staticmethod(slow))
+    names = [e.name for e in s.tree.list_dir(b"")]
+    assert {"P1", "P2", "Folder A"} <= set(names) and names == sorted(names)
